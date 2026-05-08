@@ -2,31 +2,93 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Reset */
-html, body, #root {
-  height: 100%;
+:root {
+  --cor-fundo: #030504;
+  --cor-fundo-profundo: #010302;
+
+  --cor-card: #07100b;
+  --cor-card-elevado: #0b1610;
+  --cor-card-metalico: #101d16;
+
+  --cor-borda: #1c2a24;
+  --cor-borda-verde: rgba(58, 242, 161, 0.18);
+
+  --cor-verde: #0f9d58;
+  --cor-verde-highlight: #3af2a1;
+  --cor-verde-escuro: #021a10;
+  --cor-verde-profundo: #062d1d;
+
+  --cor-texto: #f4fff8;
+  --cor-texto-secundario: #91a99c;
+  --cor-texto-fraco: #587367;
+
+  --cor-perigo: #ff4d4d;
+}
+
+html,
+body,
+#root {
+  min-height: 100%;
   margin: 0;
 }
 
-/* Dark mode fixo */
 html {
-  background-color: #000;
-  color: #fff;
+  background: var(--cor-fundo);
+  color: var(--cor-texto);
 }
 
-/* iPhone safe areas */
 body {
+  min-height: 100%;
+  background:
+    radial-gradient(circle at top right, rgba(58, 242, 161, 0.13), transparent 34%),
+    radial-gradient(circle at bottom left, rgba(15, 157, 88, 0.08), transparent 32%),
+    linear-gradient(180deg, #030504 0%, #010302 100%);
   padding-top: env(safe-area-inset-top);
   padding-bottom: env(safe-area-inset-bottom);
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
-/* Scroll suave mobile */
 * {
+  box-sizing: border-box;
   -webkit-tap-highlight-color: transparent;
 }
 
-/* Layout padrão mobile */
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
 #root {
+  width: 100%;
   max-width: 430px;
   margin: 0 auto;
+}
+
+::-webkit-scrollbar {
+  width: 0;
+  height: 0;
+}
+
+.texto-metalico-verde {
+  background: linear-gradient(135deg, #f4fff8 0%, #3af2a1 38%, #0f9d58 100%);
+  -webkit-background-clip: text;
+  color: transparent;
+}
+
+.card-premium {
+  background:
+    radial-gradient(circle at top right, rgba(58, 242, 161, 0.09), transparent 38%),
+    linear-gradient(145deg, #07100b 0%, #101d16 100%);
+  border: 1px solid rgba(58, 242, 161, 0.13);
+  box-shadow:
+    0 20px 44px rgba(0, 0, 0, 0.38),
+    inset 0 1px 0 rgba(255, 255, 255, 0.035);
+}
+
+.glow-verde {
+  box-shadow:
+    0 0 0 1px rgba(58, 242, 161, 0.18),
+    0 14px 34px rgba(15, 157, 88, 0.22);
 }

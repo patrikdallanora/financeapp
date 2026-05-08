@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export const db = new Dexie('FinanceAppDB')
 
-db.version(1).stores({
+const schema = {
   usuarios: '++id, uuid, nome, createdAt, updatedAt, deletedAt, syncStatus',
 
   cartoes:
@@ -26,7 +26,35 @@ db.version(1).stores({
 
   syncLog:
     '++id, tabela, uuid, action, timestamp, deviceId, resolved'
-})
+}
+
+db.version(1).stores(schema)
+
+db.version(2)
+  .stores(schema)
+  .upgrade(async (tx) => {
+    const mapaLegado = {
+      '🍔': 'utensils',
+      '🚗': 'car',
+      '🏠': 'home',
+      '💊': 'health',
+      '🎮': 'game',
+      '🛒': 'shopping',
+      '📺': 'tv',
+      '💰': 'income',
+      '📈': 'investments',
+      '💳': 'card',
+      '📦': 'package'
+    }
+
+    await tx.table('categorias').toCollection().modify((categoria) => {
+      if (mapaLegado[categoria.icone]) {
+        categoria.icone = mapaLegado[categoria.icone]
+        categoria.updatedAt = new Date().toISOString()
+        categoria.syncStatus = 'pending'
+      }
+    })
+  })
 
 export const gerarUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -69,7 +97,7 @@ db.on('populate', async () => {
   await db.usuarios.add({
     uuid: gerarUUID(),
     nome: 'PK',
-    cor: '#0ea5e9',
+    cor: '#0F9D58',
     createdAt: agoraISO(),
     updatedAt: agoraISO(),
     deletedAt: null,
@@ -79,7 +107,7 @@ db.on('populate', async () => {
   await db.usuarios.add({
     uuid: gerarUUID(),
     nome: 'Grazi',
-    cor: '#ec4899',
+    cor: '#3AF2A1',
     createdAt: agoraISO(),
     updatedAt: agoraISO(),
     deletedAt: null,
@@ -87,17 +115,17 @@ db.on('populate', async () => {
   })
 
   const categorias = [
-    { nome: 'Alimentação', icone: '🍔', cor: '#f97316', tipo: 'despesa' },
-    { nome: 'Transporte', icone: '🚗', cor: '#3b82f6', tipo: 'despesa' },
-    { nome: 'Casa', icone: '🏠', cor: '#22c55e', tipo: 'despesa' },
-    { nome: 'Saúde', icone: '💊', cor: '#ef4444', tipo: 'despesa' },
-    { nome: 'Lazer', icone: '🎮', cor: '#a855f7', tipo: 'despesa' },
-    { nome: 'Mercado', icone: '🛒', cor: '#eab308', tipo: 'despesa' },
-    { nome: 'Assinaturas', icone: '📺', cor: '#6366f1', tipo: 'despesa' },
-    { nome: 'Receitas', icone: '💰', cor: '#22c55e', tipo: 'receita' },
-    { nome: 'Investimentos', icone: '📈', cor: '#0ea5e9', tipo: 'receita' },
-    { nome: 'Cartão', icone: '💳', cor: '#64748b', tipo: 'despesa' },
-    { nome: 'Outros', icone: '📦', cor: '#6b7280', tipo: 'ambos' }
+    { nome: 'Alimentação', icone: 'utensils', cor: '#0F9D58', tipo: 'despesa' },
+    { nome: 'Transporte', icone: 'car', cor: '#3AF2A1', tipo: 'despesa' },
+    { nome: 'Casa', icone: 'home', cor: '#0F9D58', tipo: 'despesa' },
+    { nome: 'Saúde', icone: 'health', cor: '#EF4444', tipo: 'despesa' },
+    { nome: 'Lazer', icone: 'game', cor: '#A855F7', tipo: 'despesa' },
+    { nome: 'Mercado', icone: 'shopping', cor: '#22C55E', tipo: 'despesa' },
+    { nome: 'Assinaturas', icone: 'tv', cor: '#14B8A6', tipo: 'despesa' },
+    { nome: 'Receitas', icone: 'income', cor: '#3AF2A1', tipo: 'receita' },
+    { nome: 'Investimentos', icone: 'investments', cor: '#0F9D58', tipo: 'receita' },
+    { nome: 'Cartão', icone: 'card', cor: '#64748B', tipo: 'despesa' },
+    { nome: 'Outros', icone: 'package', cor: '#6B7280', tipo: 'ambos' }
   ]
 
   for (const categoria of categorias) {
