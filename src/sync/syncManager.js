@@ -84,10 +84,14 @@ const registrarLogSync = async (tabela, uuid, action, localData, remoteData) => 
 }
 
 const atualizarEstadoGlobalSync = (dados) => {
+  const statusAnterior = obterStatusSync()
+
   localStorage.setItem(
     'financeapp_sync_status',
     JSON.stringify({
+      ...statusAnterior,
       ...dados,
+      online: navigator.onLine,
       atualizadoEm: new Date().toISOString()
     })
   )
@@ -119,6 +123,16 @@ export const obterStatusSync = () => {
   }
 }
 
+const prepararRegistroParaRemote = (registro) => {
+  const agora = new Date().toISOString()
+
+  return {
+    ...registro,
+    syncStatus: 'synced',
+    lastSyncedAt: agora
+  }
+}
+
 export const pushSync = async () => {
   const resultado = {
     sucesso: true,
@@ -145,6 +159,8 @@ export const pushSync = async () => {
     }
 
     try {
+      const registrosParaRemote = pendentes.map(prepararRegistroParaRemote)
+
       const resposta = await fetch(API_URL, {
         method: 'POST',
         headers: {
@@ -153,7 +169,7 @@ export const pushSync = async () => {
         body: JSON.stringify({
           secret: API_SECRET,
           tabela,
-          registros: pendentes,
+          registros: registrosParaRemote,
           deviceId: obterDeviceId()
         })
       })
@@ -165,13 +181,15 @@ export const pushSync = async () => {
       }
 
       if (dados.sucesso) {
+        const agoraSync = new Date().toISOString()
+
         for (const item of pendentes) {
           await db[tabela]
             .where('uuid')
             .equals(item.uuid)
             .modify({
               syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString()
+              lastSyncedAt: agoraSync
             })
         }
 
@@ -247,13 +265,14 @@ export const pullSync = async () => {
           maiorUpdatedAt = remoto.updatedAt
         }
 
-        if (!local) {
-          await db[tabela].add({
-            ...remoto,
-            syncStatus: 'synced',
-            lastSyncedAt: new Date().toISOString()
-          })
+        const remotoNormalizado = {
+          ...remoto,
+          syncStatus: 'synced',
+          lastSyncedAt: new Date().toISOString()
+        }
 
+        if (!local) {
+          await db[tabela].add(remotoNormalizado)
           infoTabela.novos++
           continue
         }
@@ -282,11 +301,7 @@ export const pullSync = async () => {
           await db[tabela]
             .where('uuid')
             .equals(remoto.uuid)
-            .modify({
-              ...remoto,
-              syncStatus: 'synced',
-              lastSyncedAt: new Date().toISOString()
-            })
+            .modify(remotoNormalizado)
 
           infoTabela.atualizados++
         }
@@ -312,7 +327,6 @@ export const executarSync = async () => {
 
   if (!config.ok) {
     atualizarEstadoGlobalSync({
-      online: navigator.onLine,
       sincronizando: false,
       ultimaSincronizacao: null,
       ultimoErro: config.erro
@@ -352,7 +366,6 @@ export const executarSync = async () => {
   sincronizando = true
 
   atualizarEstadoGlobalSync({
-    online: true,
     sincronizando: true,
     ultimoErro: null
   })
@@ -364,9 +377,10 @@ export const executarSync = async () => {
     const sucesso = push.sucesso && pull.sucesso
 
     atualizarEstadoGlobalSync({
-      online: navigator.onLine,
       sincronizando: false,
-      ultimaSincronizacao: sucesso ? new Date().toISOString() : obterStatusSync().ultimaSincronizacao,
+      ultimaSincronizacao: sucesso
+        ? new Date().toISOString()
+        : obterStatusSync().ultimaSincronizacao,
       ultimoErro: sucesso ? null : 'Falha parcial na sincronização.'
     })
 
@@ -377,7 +391,6 @@ export const executarSync = async () => {
     }
   } catch (err) {
     atualizarEstadoGlobalSync({
-      online: navigator.onLine,
       sincronizando: false,
       ultimoErro: err.message
     })
