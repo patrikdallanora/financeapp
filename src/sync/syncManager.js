@@ -13,6 +13,37 @@ const TABELAS = [
   'metas'
 ]
 
+const INTERVALO_SYNC = 1000 * 60
+const DEBOUNCE_SYNC = 2500
+
+let sincronizando = false
+let intervaloAtivo = null
+let debounceTimer = null
+let autoSyncIniciado = false
+
+const obterDeviceId = () => {
+  let deviceId = localStorage.getItem('financeapp_device_id')
+
+  if (!deviceId) {
+    deviceId = crypto.randomUUID()
+    localStorage.setItem('financeapp_device_id', deviceId)
+  }
+
+  return deviceId
+}
+
+const obterChaveUltimoPull = (tabela) => {
+  return `financeapp_ultimo_pull_${tabela}`
+}
+
+const obterUltimoPull = (tabela) => {
+  return localStorage.getItem(obterChaveUltimoPull(tabela)) || ''
+}
+
+const salvarUltimoPull = (tabela, dataISO) => {
+  localStorage.setItem(obterChaveUltimoPull(tabela), dataISO)
+}
+
 const verificarConfiguracaoSync = () => {
   if (!API_URL || API_URL === 'undefined') {
     return {
@@ -39,48 +70,76 @@ const lerRespostaJson = async (resposta) => {
   }
 }
 
-const obterRegistrosParaPush = async (tabela, forcarTudo = false) => {
-  if (forcarTudo) {
-    const todos = await db[tabela].toArray()
-    return todos.filter((item) => !item.deletedAt)
-  }
-
-  return await db[tabela]
-    .where('syncStatus')
-    .equals('pending')
-    .toArray()
+const registrarLogSync = async (tabela, uuid, action, localData, remoteData) => {
+  await db.syncLog.add({
+    tabela,
+    uuid,
+    action,
+    timestamp: new Date().toISOString(),
+    deviceId: obterDeviceId(),
+    resolved: false,
+    localData: JSON.stringify(localData || {}),
+    remoteData: JSON.stringify(remoteData || {})
+  })
 }
 
-export const pushSync = async ({ forcarTudo = false } = {}) => {
-  const config = verificarConfiguracaoSync()
+const atualizarEstadoGlobalSync = (dados) => {
+  localStorage.setItem(
+    'financeapp_sync_status',
+    JSON.stringify({
+      ...dados,
+      atualizadoEm: new Date().toISOString()
+    })
+  )
 
-  if (!config.ok) {
+  window.dispatchEvent(new Event('financeapp-sync-status'))
+}
+
+export const obterStatusSync = () => {
+  const bruto = localStorage.getItem('financeapp_sync_status')
+
+  if (!bruto) {
     return {
-      sucesso: false,
-      etapa: 'push',
-      erro: config.erro,
-      tabelas: []
+      online: navigator.onLine,
+      sincronizando: false,
+      ultimaSincronizacao: null,
+      ultimoErro: null
     }
   }
 
+  try {
+    return JSON.parse(bruto)
+  } catch {
+    return {
+      online: navigator.onLine,
+      sincronizando: false,
+      ultimaSincronizacao: null,
+      ultimoErro: null
+    }
+  }
+}
+
+export const pushSync = async () => {
   const resultado = {
     sucesso: true,
     etapa: 'push',
-    modo: forcarTudo ? 'forcado' : 'pendentes',
     tabelas: []
   }
 
   for (const tabela of TABELAS) {
-    const registros = await obterRegistrosParaPush(tabela, forcarTudo)
+    const pendentes = await db[tabela]
+      .where('syncStatus')
+      .equals('pending')
+      .toArray()
 
     const infoTabela = {
       tabela,
-      encontrados: registros.length,
+      pendentes: pendentes.length,
       enviados: 0,
       erro: null
     }
 
-    if (registros.length === 0) {
+    if (pendentes.length === 0) {
       resultado.tabelas.push(infoTabela)
       continue
     }
@@ -94,7 +153,8 @@ export const pushSync = async ({ forcarTudo = false } = {}) => {
         body: JSON.stringify({
           secret: API_SECRET,
           tabela,
-          registros
+          registros: pendentes,
+          deviceId: obterDeviceId()
         })
       })
 
@@ -105,16 +165,17 @@ export const pushSync = async ({ forcarTudo = false } = {}) => {
       }
 
       if (dados.sucesso) {
-        for (const item of registros) {
+        for (const item of pendentes) {
           await db[tabela]
             .where('uuid')
             .equals(item.uuid)
             .modify({
-              syncStatus: 'synced'
+              syncStatus: 'synced',
+              lastSyncedAt: new Date().toISOString()
             })
         }
 
-        infoTabela.enviados = registros.length
+        infoTabela.enviados = pendentes.length
       }
     } catch (err) {
       infoTabela.erro = err.message
@@ -129,17 +190,6 @@ export const pushSync = async ({ forcarTudo = false } = {}) => {
 }
 
 export const pullSync = async () => {
-  const config = verificarConfiguracaoSync()
-
-  if (!config.ok) {
-    return {
-      sucesso: false,
-      etapa: 'pull',
-      erro: config.erro,
-      tabelas: []
-    }
-  }
-
   const resultado = {
     sucesso: true,
     etapa: 'pull',
@@ -157,9 +207,20 @@ export const pullSync = async () => {
     }
 
     try {
-      const url = `${API_URL}?tabela=${encodeURIComponent(tabela)}&secret=${encodeURIComponent(API_SECRET || '')}`
+      const updatedAfter = obterUltimoPull(tabela)
 
-      const resposta = await fetch(url)
+      const url = new URL(API_URL)
+      url.searchParams.set('tabela', tabela)
+      url.searchParams.set('secret', API_SECRET || '')
+
+      if (updatedAfter) {
+        url.searchParams.set('updatedAfter', updatedAfter)
+      }
+
+      const resposta = await fetch(url.toString(), {
+        method: 'GET'
+      })
+
       const remotos = await lerRespostaJson(resposta)
 
       if (!resposta.ok || remotos.erro) {
@@ -172,6 +233,8 @@ export const pullSync = async () => {
 
       infoTabela.recebidos = remotos.length
 
+      let maiorUpdatedAt = updatedAfter
+
       for (const remoto of remotos) {
         if (!remoto.uuid) continue
 
@@ -180,10 +243,15 @@ export const pullSync = async () => {
           .equals(remoto.uuid)
           .first()
 
+        if (remoto.updatedAt && (!maiorUpdatedAt || remoto.updatedAt > maiorUpdatedAt)) {
+          maiorUpdatedAt = remoto.updatedAt
+        }
+
         if (!local) {
           await db[tabela].add({
             ...remoto,
-            syncStatus: 'synced'
+            syncStatus: 'synced',
+            lastSyncedAt: new Date().toISOString()
           })
 
           infoTabela.novos++
@@ -205,6 +273,7 @@ export const pullSync = async () => {
               syncStatus: 'conflict'
             })
 
+          await registrarLogSync(tabela, remoto.uuid, 'conflict', local, remoto)
           infoTabela.conflitos++
           continue
         }
@@ -215,11 +284,16 @@ export const pullSync = async () => {
             .equals(remoto.uuid)
             .modify({
               ...remoto,
-              syncStatus: 'synced'
+              syncStatus: 'synced',
+              lastSyncedAt: new Date().toISOString()
             })
 
           infoTabela.atualizados++
         }
+      }
+
+      if (maiorUpdatedAt) {
+        salvarUltimoPull(tabela, maiorUpdatedAt)
       }
     } catch (err) {
       infoTabela.erro = err.message
@@ -233,10 +307,17 @@ export const pullSync = async () => {
   return resultado
 }
 
-export const executarSync = async ({ forcarTudo = false } = {}) => {
+export const executarSync = async () => {
   const config = verificarConfiguracaoSync()
 
   if (!config.ok) {
+    atualizarEstadoGlobalSync({
+      online: navigator.onLine,
+      sincronizando: false,
+      ultimaSincronizacao: null,
+      ultimoErro: config.erro
+    })
+
     return {
       sucesso: false,
       erro: config.erro,
@@ -245,29 +326,127 @@ export const executarSync = async ({ forcarTudo = false } = {}) => {
     }
   }
 
-  const push = await pushSync({ forcarTudo })
-  const pull = await pullSync()
+  if (!navigator.onLine) {
+    atualizarEstadoGlobalSync({
+      online: false,
+      sincronizando: false,
+      ultimoErro: null
+    })
 
-  return {
-    sucesso: push.sucesso && pull.sucesso,
-    push,
-    pull
+    return {
+      sucesso: false,
+      erro: 'offline',
+      push: null,
+      pull: null
+    }
+  }
+
+  if (sincronizando) {
+    return {
+      sucesso: true,
+      ignorado: true,
+      motivo: 'Sincronização já em andamento.'
+    }
+  }
+
+  sincronizando = true
+
+  atualizarEstadoGlobalSync({
+    online: true,
+    sincronizando: true,
+    ultimoErro: null
+  })
+
+  try {
+    const push = await pushSync()
+    const pull = await pullSync()
+
+    const sucesso = push.sucesso && pull.sucesso
+
+    atualizarEstadoGlobalSync({
+      online: navigator.onLine,
+      sincronizando: false,
+      ultimaSincronizacao: sucesso ? new Date().toISOString() : obterStatusSync().ultimaSincronizacao,
+      ultimoErro: sucesso ? null : 'Falha parcial na sincronização.'
+    })
+
+    return {
+      sucesso,
+      push,
+      pull
+    }
+  } catch (err) {
+    atualizarEstadoGlobalSync({
+      online: navigator.onLine,
+      sincronizando: false,
+      ultimoErro: err.message
+    })
+
+    return {
+      sucesso: false,
+      erro: err.message,
+      push: null,
+      pull: null
+    }
+  } finally {
+    sincronizando = false
   }
 }
 
+export const agendarSync = () => {
+  if (!navigator.onLine) return
+
+  clearTimeout(debounceTimer)
+
+  debounceTimer = setTimeout(() => {
+    executarSync()
+  }, DEBOUNCE_SYNC)
+}
+
 export const iniciarAutoSync = () => {
-  const config = verificarConfiguracaoSync()
+  if (autoSyncIniciado) return
 
-  if (!config.ok) {
-    console.warn(`Auto sync ignorado: ${config.erro}`)
-    return
-  }
+  autoSyncIniciado = true
 
-  window.addEventListener('online', () => executarSync())
+  executarSync()
 
-  setInterval(() => {
-    if (navigator.onLine) {
+  window.addEventListener('online', () => {
+    atualizarEstadoGlobalSync({
+      online: true,
+      sincronizando: false,
+      ultimoErro: null
+    })
+
+    executarSync()
+  })
+
+  window.addEventListener('offline', () => {
+    atualizarEstadoGlobalSync({
+      online: false,
+      sincronizando: false,
+      ultimoErro: null
+    })
+  })
+
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible' && navigator.onLine) {
       executarSync()
     }
-  }, 1000 * 60 * 5)
+  })
+
+  intervaloAtivo = setInterval(() => {
+    if (navigator.onLine && document.visibilityState === 'visible') {
+      executarSync()
+    }
+  }, INTERVALO_SYNC)
+}
+
+export const pararAutoSync = () => {
+  if (intervaloAtivo) {
+    clearInterval(intervaloAtivo)
+    intervaloAtivo = null
+  }
+
+  clearTimeout(debounceTimer)
+  autoSyncIniciado = false
 }

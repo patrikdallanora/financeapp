@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useDbReady } from './hooks/useDbReady'
 import { useAuth } from './hooks/useAuth'
+import { iniciarAutoSync } from './sync/syncManager'
 
 import Dashboard from './pages/Dashboard'
 import Consolidacao from './pages/Consolidacao'
@@ -18,6 +19,12 @@ function App() {
 
   const [page, setPage] = useState('dashboard')
   const [pin, setPin] = useState('')
+
+  useEffect(() => {
+    if (ready && authenticated) {
+      iniciarAutoSync()
+    }
+  }, [ready, authenticated])
 
   if (loading || !ready) {
     return (
@@ -49,7 +56,7 @@ function App() {
 
           <button
             onClick={autenticarBiometria}
-            className="mb-4 min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#39FF88] via-[#00E676] to-[#007A3D] px-4 py-3 font-bold text-black shadow-[0_12px_30px_rgba(0,230,118,0.22)]"
+            className="mb-4 min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] px-4 py-3 font-bold text-white shadow-[0_12px_30px_rgba(0,230,118,0.22)]"
           >
             Usar biometria
           </button>
