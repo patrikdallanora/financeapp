@@ -3,6 +3,7 @@ import { useDbReady } from './hooks/useDbReady'
 import { useAuth } from './hooks/useAuth'
 import { iniciarAutoSync } from './sync/syncManager'
 
+import LockScreen from './pages/LockScreen'
 import Dashboard from './pages/Dashboard'
 import Consolidacao from './pages/Consolidacao'
 import Cartoes from './pages/Cartoes'
@@ -15,10 +16,16 @@ import { ConflictBanner } from './components/ConflictBanner'
 
 function App() {
   const { ready, error } = useDbReady()
-  const { authenticated, loading, autenticarBiometria, autenticarPIN } = useAuth()
+  const {
+    authenticated,
+    loading,
+    authError,
+    biometriaDisponivel,
+    autenticarBiometria,
+    autenticarPIN
+  } = useAuth()
 
   const [page, setPage] = useState('dashboard')
-  const [pin, setPin] = useState('')
 
   useEffect(() => {
     if (ready && authenticated) {
@@ -29,14 +36,17 @@ function App() {
   if (loading || !ready) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-black text-white">
-        Carregando...
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-10 w-10 animate-pulse rounded-2xl border border-[#3AF2A1]/30 bg-[#3AF2A1]/10" />
+          <p className="text-sm font-semibold text-[#91A99C]">Carregando FinanceApp...</p>
+        </div>
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-black text-red-400">
+      <div className="flex min-h-screen items-center justify-center bg-black px-6 text-center text-red-400">
         Erro ao iniciar o banco local.
       </div>
     )
@@ -44,47 +54,12 @@ function App() {
 
   if (!authenticated) {
     return (
-      <div className="flex min-h-screen flex-col items-center justify-center bg-black px-6 text-white">
-        <div className="w-full max-w-sm rounded-2xl border border-[#1C2A24] bg-[#0B0F0D] p-6 shadow-xl">
-          <h1 className="mb-2 text-center text-2xl font-black texto-metalico-verde">
-            FinanceApp
-          </h1>
-
-          <p className="mb-6 text-center text-sm text-[#8FA99B]">
-            Desbloqueie para acessar suas finanças.
-          </p>
-
-          <button
-            onClick={autenticarBiometria}
-            className="mb-4 min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] px-4 py-3 font-bold text-white shadow-[0_12px_30px_rgba(0,230,118,0.22)]"
-          >
-            Usar biometria
-          </button>
-
-          <input
-            type="password"
-            inputMode="numeric"
-            placeholder="PIN"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            className="mb-3 min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-black px-4 py-3 text-center text-white outline-none focus:border-[#00E676]"
-          />
-
-          <button
-            onClick={() => {
-              const ok = autenticarPIN(pin)
-              if (!ok) alert('PIN inválido')
-            }}
-            className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] px-4 py-3 font-bold text-[#39FF88]"
-          >
-            Entrar com PIN
-          </button>
-
-          <p className="mt-4 text-center text-xs text-[#8FA99B]">
-            PIN padrão temporário: 1234
-          </p>
-        </div>
-      </div>
+      <LockScreen
+        autenticarBiometria={autenticarBiometria}
+        autenticarPIN={autenticarPIN}
+        authError={authError}
+        biometriaDisponivel={biometriaDisponivel}
+      />
     )
   }
 
