@@ -32,9 +32,15 @@ const obterDeviceId = () => {
   return deviceId
 }
 
-const obterChaveUltimoPull = (tabela) => {
-  return `financeapp_ultimo_pull_${tabela}`
+const verificarConfiguracaoSync = () => {
+  if (!API_URL || API_URL === 'undefined') {
+    return { ok: false, erro: 'VITE_SHEETS_API_URL não configurada.' }
+  }
+
+  return { ok: true, erro: null }
 }
+
+const obterChaveUltimoPull = (tabela) => `financeapp_ultimo_pull_${tabela}`
 
 const obterUltimoPull = (tabela) => {
   return localStorage.getItem(obterChaveUltimoPull(tabela)) || ''
@@ -42,20 +48,6 @@ const obterUltimoPull = (tabela) => {
 
 const salvarUltimoPull = (tabela, dataISO) => {
   localStorage.setItem(obterChaveUltimoPull(tabela), dataISO)
-}
-
-const verificarConfiguracaoSync = () => {
-  if (!API_URL || API_URL === 'undefined') {
-    return {
-      ok: false,
-      erro: 'VITE_SHEETS_API_URL não configurada.'
-    }
-  }
-
-  return {
-    ok: true,
-    erro: null
-  }
 }
 
 const lerRespostaJson = async (resposta) => {
@@ -68,19 +60,6 @@ const lerRespostaJson = async (resposta) => {
   } catch {
     throw new Error(`Resposta inválida da API: ${texto.slice(0, 300)}`)
   }
-}
-
-const registrarLogSync = async (tabela, uuid, action, localData, remoteData) => {
-  await db.syncLog.add({
-    tabela,
-    uuid,
-    action,
-    timestamp: new Date().toISOString(),
-    deviceId: obterDeviceId(),
-    resolved: false,
-    localData: JSON.stringify(localData || {}),
-    remoteData: JSON.stringify(remoteData || {})
-  })
 }
 
 const atualizarEstadoGlobalSync = (dados) => {
@@ -123,13 +102,40 @@ export const obterStatusSync = () => {
   }
 }
 
-const prepararRegistroParaRemote = (registro) => {
-  const agora = new Date().toISOString()
+const registrarLogSync = async (tabela, uuid, action, localData, remoteData) => {
+  await db.syncLog.add({
+    tabela,
+    uuid,
+    action,
+    timestamp: new Date().toISOString(),
+    deviceId: obterDeviceId(),
+    resolved: false,
+    localData: JSON.stringify(localData || {}),
+    remoteData: JSON.stringify(remoteData || {})
+  })
+}
 
+const removerIdLocal = (registro) => {
+  const copia = { ...registro }
+  delete copia.id
+  return copia
+}
+
+const prepararRegistroParaRemote = (registro) => {
   return {
     ...registro,
     syncStatus: 'synced',
-    lastSyncedAt: agora
+    lastSyncedAt: new Date().toISOString()
+  }
+}
+
+const prepararRegistroParaLocal = (registro) => {
+  const semId = removerIdLocal(registro)
+
+  return {
+    ...semId,
+    syncStatus: 'synced',
+    lastSyncedAt: new Date().toISOString()
   }
 }
 
@@ -265,11 +271,7 @@ export const pullSync = async () => {
           maiorUpdatedAt = remoto.updatedAt
         }
 
-        const remotoNormalizado = {
-          ...remoto,
-          syncStatus: 'synced',
-          lastSyncedAt: new Date().toISOString()
-        }
+        const remotoNormalizado = prepararRegistroParaLocal(remoto)
 
         if (!local) {
           await db[tabela].add(remotoNormalizado)
@@ -328,7 +330,6 @@ export const executarSync = async () => {
   if (!config.ok) {
     atualizarEstadoGlobalSync({
       sincronizando: false,
-      ultimaSincronizacao: null,
       ultimoErro: config.erro
     })
 
@@ -373,7 +374,6 @@ export const executarSync = async () => {
   try {
     const push = await pushSync()
     const pull = await pullSync()
-
     const sucesso = push.sucesso && pull.sucesso
 
     atualizarEstadoGlobalSync({
