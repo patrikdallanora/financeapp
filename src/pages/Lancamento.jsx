@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, ChevronDown, Save } from 'lucide-react'
+import { ArrowLeft, ChevronDown, Save, Sparkles } from 'lucide-react'
 
 import { db, criarRegistroBase, agora, gerarUUID } from '../db/database'
 import { agendarSync } from '../sync/syncManager'
@@ -81,6 +81,14 @@ const faturaEhAnterior = (faturaRef) => {
   return faturaRef < mesAtual
 }
 
+const normalizarTexto = (texto) => {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
+
 export default function Lancamento({ onVoltar, configInicial }) {
   const [tipo] = useState(configInicial?.tipo || 'despesa')
   const [usuarioId, setUsuarioId] = useState('')
@@ -99,6 +107,7 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const [parcelaAtual, setParcelaAtual] = useState('1')
   const [totalParcelas, setTotalParcelas] = useState('2')
   const [observacoes, setObservacoes] = useState('')
+  const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
 
   const usuarios = useLiveQuery(async () => {
     return await db.usuarios.toArray()
@@ -117,6 +126,11 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const cartoes = useLiveQuery(async () => {
     const todos = await db.cartoes.toArray()
     return todos.filter((cartao) => !cartao.deletedAt && cartao.ativo)
+  }, [])
+
+  const lancamentos = useLiveQuery(async () => {
+    const todos = await db.lancamentos.toArray()
+    return todos.filter((lancamento) => !lancamento.deletedAt)
   }, [])
 
   const usuarioPadrao = usuarios?.find((usuario) => usuario.nome === 'PK') || usuarios?.[0]
@@ -161,6 +175,61 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const lancamentoCartao = metodoPagamento === 'cartao'
   const mostrarStatus = !lancamentoCartao || faturaEhAnterior(faturaSelecionada)
 
+  const sugestoesBase = useMemo(() => {
+    if (!lancamentos || !categorias || !subcategorias) return []
+
+    const mapa = new Map()
+
+    const historicoOrdenado = [...lancamentos]
+      .filter((lancamento) => lancamento.descricao)
+      .sort((a, b) => {
+        const dataA = new Date(a.updatedAt || a.dataCompetencia || 0).getTime()
+        const dataB = new Date(b.updatedAt || b.dataCompetencia || 0).getTime()
+        return dataB - dataA
+      })
+
+    for (const lancamento of historicoOrdenado) {
+      const chave = normalizarTexto(lancamento.descricao)
+
+      if (!chave || mapa.has(chave)) continue
+
+      const categoria = categorias.find((item) => item.id === Number(lancamento.categoriaId))
+      const subcategoria = subcategorias.find((item) => item.id === Number(lancamento.subcategoriaId))
+      const cartao = cartoes?.find((item) => item.id === Number(lancamento.cartaoId))
+
+      mapa.set(chave, {
+        descricao: lancamento.descricao,
+        tipo: lancamento.tipo,
+        metodoPagamento: lancamento.metodoPagamento,
+        categoriaId: lancamento.categoriaId,
+        subcategoriaId: lancamento.subcategoriaId,
+        cartaoId: lancamento.cartaoId,
+        categoria,
+        subcategoria,
+        cartao
+      })
+    }
+
+    return Array.from(mapa.values())
+  }, [lancamentos, categorias, subcategorias, cartoes])
+
+  const sugestoesFiltradas = useMemo(() => {
+    const termo = normalizarTexto(descricao)
+
+    if (termo.length < 2 || !mostrarSugestoes) return []
+
+    return sugestoesBase
+      .filter((sugestao) => {
+        const descricaoNormalizada = normalizarTexto(sugestao.descricao)
+        return descricaoNormalizada.includes(termo)
+      })
+      .filter((sugestao) => {
+        if (tipo === 'receita') return sugestao.tipo === 'receita'
+        return sugestao.tipo === 'despesa'
+      })
+      .slice(0, 6)
+  }, [descricao, sugestoesBase, mostrarSugestoes, tipo])
+
   const atualizarMetodo = (metodo) => {
     setMetodoPagamento(metodo)
 
@@ -186,6 +255,28 @@ export default function Lancamento({ onVoltar, configInicial }) {
       const fatura = calcularFaturaAtualCartao(data, cartaoSelecionado)
       setFaturaRef(fatura)
     }
+  }
+
+  const selecionarSugestao = (sugestao) => {
+    setDescricao(sugestao.descricao || '')
+
+    if (sugestao.metodoPagamento && configInicial?.metodoPagamento !== 'cartao') {
+      setMetodoPagamento(sugestao.metodoPagamento)
+    }
+
+    if (sugestao.categoriaId) {
+      setCategoriaId(String(sugestao.categoriaId))
+    }
+
+    if (sugestao.subcategoriaId) {
+      setSubcategoriaId(String(sugestao.subcategoriaId))
+    }
+
+    if (sugestao.metodoPagamento === 'cartao' && sugestao.cartaoId) {
+      atualizarCartao(String(sugestao.cartaoId))
+    }
+
+    setMostrarSugestoes(false)
   }
 
   const validar = () => {
@@ -323,7 +414,7 @@ export default function Lancamento({ onVoltar, configInicial }) {
     onVoltar()
   }
 
-  if (!usuarios || !categorias || !subcategorias || !cartoes) {
+  if (!usuarios || !categorias || !subcategorias || !cartoes || !lancamentos) {
     return (
       <div className="space-y-4 pb-24">
         <TopoTela titulo="Lançamento" subtitulo="Carregando formulário..." />
@@ -375,11 +466,12 @@ export default function Lancamento({ onVoltar, configInicial }) {
           </select>
         </label>
 
-        <CampoTexto
-          label="Descrição"
-          value={descricao}
-          onChange={setDescricao}
-          placeholder="Ex: Mercado, salário, combustível"
+        <CampoDescricaoComSugestoes
+          descricao={descricao}
+          setDescricao={setDescricao}
+          setMostrarSugestoes={setMostrarSugestoes}
+          sugestoes={sugestoesFiltradas}
+          onSelecionarSugestao={selecionarSugestao}
         />
 
         <CampoTexto
@@ -522,6 +614,87 @@ export default function Lancamento({ onVoltar, configInicial }) {
           </span>
         </Botao>
       </CardPremium>
+    </div>
+  )
+}
+
+function CampoDescricaoComSugestoes({
+  descricao,
+  setDescricao,
+  setMostrarSugestoes,
+  sugestoes,
+  onSelecionarSugestao
+}) {
+  return (
+    <div className="relative">
+      <label className="block">
+        <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
+          Descrição
+        </span>
+
+        <input
+          type="text"
+          value={descricao}
+          placeholder="Ex: Mercado, salário, combustível"
+          onFocus={() => setMostrarSugestoes(true)}
+          onChange={(event) => {
+            setDescricao(event.target.value)
+            setMostrarSugestoes(true)
+          }}
+          className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none placeholder:text-[#587367] focus:border-[#3AF2A1] focus:ring-2 focus:ring-[#3AF2A1]/10"
+        />
+      </label>
+
+      {sugestoes.length > 0 && (
+        <div className="absolute left-0 right-0 top-[76px] z-[60] max-h-72 overflow-y-auto rounded-3xl border border-[#1C2A24] bg-[#07100B] p-2 shadow-2xl">
+          <div className="mb-2 flex items-center gap-2 px-2 text-[11px] font-black uppercase tracking-[0.18em] text-[#3AF2A1]">
+            <Sparkles size={13} />
+            Sugestões inteligentes
+          </div>
+
+          {sugestoes.map((sugestao) => (
+            <button
+              key={`${sugestao.descricao}-${sugestao.categoriaId}-${sugestao.subcategoriaId}-${sugestao.cartaoId || 'sem-cartao'}`}
+              type="button"
+              onMouseDown={(event) => event.preventDefault()}
+              onClick={() => onSelecionarSugestao(sugestao)}
+              className="flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:bg-[#3AF2A1]/5 active:scale-[0.99]"
+            >
+              {sugestao.categoria ? (
+                <IconeCategoria
+                  icone={sugestao.categoria.icone}
+                  cor={sugestao.categoria.cor}
+                  tamanho="sm"
+                  ativo
+                />
+              ) : (
+                <div className="h-10 w-10 rounded-2xl border border-[#1C2A24] bg-[#030504]" />
+              )}
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-black text-[#F4FFF8]">
+                  {sugestao.descricao}
+                </p>
+
+                <p className="mt-0.5 truncate text-xs text-[#91A99C]">
+                  {sugestao.categoria?.nome || 'Sem categoria'}
+                  {sugestao.subcategoria?.nome ? ` · ${sugestao.subcategoria.nome}` : ''}
+                </p>
+
+                {sugestao.cartao && (
+                  <div className="mt-1 flex items-center gap-1.5 text-[11px] text-[#587367]">
+                    <span
+                      className="h-2.5 w-2.5 rounded-full"
+                      style={{ backgroundColor: sugestao.cartao.cor || '#0F9D58' }}
+                    />
+                    {sugestao.cartao.nome}
+                  </div>
+                )}
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   )
 }
