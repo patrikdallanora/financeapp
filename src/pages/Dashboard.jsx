@@ -12,7 +12,7 @@ const formatarMoeda = (valor) => {
 
 const obterMesAtual = () => new Date().toISOString().slice(0, 7)
 
-export default function Dashboard({ onNovoLancamento }) {
+export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const mesAtual = obterMesAtual()
 
@@ -57,9 +57,25 @@ export default function Dashboard({ onNovoLancamento }) {
       </header>
 
       <div className="grid gap-3">
-        <CardResumo titulo="Receitas" valor={totalReceitas} tipo="positivo" />
-        <CardResumo titulo="Despesas" valor={totalDespesas} tipo="negativo" />
-        <CardResumo titulo="Saldo" valor={saldo} tipo={saldo >= 0 ? 'positivo' : 'negativo'} />
+        <CardResumo
+          titulo="Receitas"
+          valor={totalReceitas}
+          tipo="positivo"
+          onClick={() => onAbrirExtratos('receita')}
+        />
+
+        <CardResumo
+          titulo="Despesas"
+          valor={totalDespesas}
+          tipo="negativo"
+          onClick={() => onAbrirExtratos('despesa')}
+        />
+
+        <CardResumo
+          titulo="Saldo"
+          valor={saldo}
+          tipo={saldo >= 0 ? 'positivo' : 'negativo'}
+        />
       </div>
 
       {menuAberto && (
@@ -137,11 +153,18 @@ export default function Dashboard({ onNovoLancamento }) {
   )
 }
 
-function CardResumo({ titulo, valor, tipo }) {
+function CardResumo({ titulo, valor, tipo, onClick }) {
   const positivo = tipo === 'positivo'
+  const Component = onClick ? 'button' : 'div'
 
   return (
-    <div className="card-premium rounded-[28px] p-4">
+    <Component
+      onClick={onClick}
+      className={`
+        card-premium w-full rounded-[28px] p-4 text-left
+        ${onClick ? 'transition active:scale-[0.99]' : ''}
+      `}
+    >
       <p className="text-xs font-semibold text-[#91A99C]">{titulo}</p>
 
       <p
@@ -151,7 +174,7 @@ function CardResumo({ titulo, valor, tipo }) {
       >
         {formatarMoeda(valor)}
       </p>
-    </div>
+    </Component>
   )
 }
 

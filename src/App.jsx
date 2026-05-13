@@ -6,6 +6,7 @@ import { iniciarAutoSync } from './sync/syncManager'
 import LockScreen from './pages/LockScreen'
 import Dashboard from './pages/Dashboard'
 import Lancamento from './pages/Lancamento'
+import Extratos from './pages/Extratos'
 import Cartoes from './pages/Cartoes'
 import Metas from './pages/Metas'
 import Categorias from './pages/Categorias'
@@ -27,6 +28,7 @@ function App() {
 
   const [page, setPage] = useState('dashboard')
   const [configLancamento, setConfigLancamento] = useState(null)
+  const [filtroExtratos, setFiltroExtratos] = useState('todos')
 
   useEffect(() => {
     if (ready && authenticated) {
@@ -69,6 +71,11 @@ function App() {
     setPage('lancamento')
   }
 
+  const abrirExtratos = (filtroInicial) => {
+    setFiltroExtratos(filtroInicial || 'todos')
+    setPage('extratos')
+  }
+
   const voltarDashboard = () => {
     setConfigLancamento(null)
     setPage('dashboard')
@@ -77,11 +84,23 @@ function App() {
   const renderPage = () => {
     switch (page) {
       case 'dashboard':
-        return <Dashboard onNovoLancamento={abrirLancamento} />
+        return (
+          <Dashboard
+            onNovoLancamento={abrirLancamento}
+            onAbrirExtratos={abrirExtratos}
+          />
+        )
       case 'lancamento':
         return (
           <Lancamento
             configInicial={configLancamento}
+            onVoltar={voltarDashboard}
+          />
+        )
+      case 'extratos':
+        return (
+          <Extratos
+            filtroInicial={filtroExtratos}
             onVoltar={voltarDashboard}
           />
         )
@@ -94,11 +113,16 @@ function App() {
       case 'config':
         return <Configuracoes />
       default:
-        return <Dashboard onNovoLancamento={abrirLancamento} />
+        return (
+          <Dashboard
+            onNovoLancamento={abrirLancamento}
+            onAbrirExtratos={abrirExtratos}
+          />
+        )
     }
   }
 
-  const mostrarMenu = page !== 'lancamento'
+  const mostrarMenu = page !== 'lancamento' && page !== 'extratos'
 
   return (
     <div className="min-h-screen bg-black text-white">
