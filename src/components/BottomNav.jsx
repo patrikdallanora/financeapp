@@ -1,6 +1,5 @@
 import {
   Home,
-  List,
   CreditCard,
   Target,
   Settings,
@@ -10,7 +9,6 @@ import {
 export function BottomNav({ current, onChange }) {
   const itens = [
     { key: 'dashboard', icon: Home, label: 'Home' },
-    { key: 'extrato', icon: List, label: 'Extrato' },
     { key: 'cartoes', icon: CreditCard, label: 'Cartões' },
     { key: 'metas', icon: Target, label: 'Metas' },
     { key: 'categorias', icon: FolderTree, label: 'Categorias' },

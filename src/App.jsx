@@ -5,7 +5,7 @@ import { iniciarAutoSync } from './sync/syncManager'
 
 import LockScreen from './pages/LockScreen'
 import Dashboard from './pages/Dashboard'
-import Consolidacao from './pages/Consolidacao'
+import Lancamento from './pages/Lancamento'
 import Cartoes from './pages/Cartoes'
 import Metas from './pages/Metas'
 import Categorias from './pages/Categorias'
@@ -26,6 +26,7 @@ function App() {
   } = useAuth()
 
   const [page, setPage] = useState('dashboard')
+  const [configLancamento, setConfigLancamento] = useState(null)
 
   useEffect(() => {
     if (ready && authenticated) {
@@ -63,12 +64,27 @@ function App() {
     )
   }
 
+  const abrirLancamento = (config) => {
+    setConfigLancamento(config)
+    setPage('lancamento')
+  }
+
+  const voltarDashboard = () => {
+    setConfigLancamento(null)
+    setPage('dashboard')
+  }
+
   const renderPage = () => {
     switch (page) {
       case 'dashboard':
-        return <Dashboard />
-      case 'extrato':
-        return <Consolidacao />
+        return <Dashboard onNovoLancamento={abrirLancamento} />
+      case 'lancamento':
+        return (
+          <Lancamento
+            configInicial={configLancamento}
+            onVoltar={voltarDashboard}
+          />
+        )
       case 'cartoes':
         return <Cartoes />
       case 'metas':
@@ -78,9 +94,11 @@ function App() {
       case 'config':
         return <Configuracoes />
       default:
-        return <Dashboard />
+        return <Dashboard onNovoLancamento={abrirLancamento} />
     }
   }
+
+  const mostrarMenu = page !== 'lancamento'
 
   return (
     <div className="min-h-screen bg-black text-white">
@@ -90,7 +108,7 @@ function App() {
         {renderPage()}
       </main>
 
-      <BottomNav current={page} onChange={setPage} />
+      {mostrarMenu && <BottomNav current={page} onChange={setPage} />}
     </div>
   )
 }
