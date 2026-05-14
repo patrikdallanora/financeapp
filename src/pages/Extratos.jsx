@@ -26,6 +26,21 @@ const formatarMoeda = (valor) => {
   })
 }
 
+const formatarCampoMoeda = (valor) => {
+  const apenasNumeros = String(valor || '').replace(/\D/g, '')
+  const numero = Number(apenasNumeros) / 100
+
+  return numero.toLocaleString('pt-BR', {
+    style: 'currency',
+    currency: 'BRL'
+  })
+}
+
+const moedaParaNumero = (valorFormatado) => {
+  const apenasNumeros = String(valorFormatado || '').replace(/\D/g, '')
+  return Number(apenasNumeros) / 100
+}
+
 const normalizarTexto = (texto) => {
   return String(texto || '')
     .normalize('NFD')
@@ -59,7 +74,7 @@ const formatarDataGrupo = (dataISO) => {
   if (dataISO === hoje) return 'Hoje'
   if (dataISO === ontem) return 'Ontem'
 
-  const [ano, mes, dia] = dataISO.split('-')
+  const [, mes, dia] = dataISO.split('-')
   return `${dia}/${mes}`
 }
 
@@ -91,6 +106,13 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
+
+  const [editor, setEditor] = useState(null)
+  const [descricaoEdicao, setDescricaoEdicao] = useState('')
+  const [valorEdicao, setValorEdicao] = useState('')
+  const [categoriaEdicaoId, setCategoriaEdicaoId] = useState('')
+  const [subcategoriaEdicaoId, setSubcategoriaEdicaoId] = useState('')
+  const [escopoEdicao, setEscopoEdicao] = useState('este')
 
   const lancamentos = useLiveQuery(async () => {
     const todos = await db.lancamentos.toArray()
@@ -196,6 +218,154 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
     return Array.from(mapa.entries())
   }, [lancamentosFiltrados])
+
+  const abrirEditorDescricao = (lancamento) => {
+    setEditor({ tipo: 'descricao', lancamento })
+    setDescricaoEdicao(lancamento.descricao || '')
+    setEscopoEdicao('este')
+  }
+
+  const abrirEditorValor = (lancamento) => {
+    setEditor({ tipo: 'valor', lancamento })
+    setValorEdicao(formatarCampoMoeda(String(Math.round(Number(lancamento.valor || 0) * 100))))
+    setEscopoEdicao('este')
+  }
+
+  const abrirEditorCategoria = (lancamento) => {
+    setEditor({ tipo: 'categoria', lancamento })
+    setCategoriaEdicaoId(String(lancamento.categoriaId || ''))
+    setSubcategoriaEdicaoId(String(lancamento.subcategoriaId || ''))
+    setEscopoEdicao('este')
+  }
+
+  const fecharEditor = () => {
+    setEditor(null)
+    setDescricaoEdicao('')
+    setValorEdicao('')
+    setCategoriaEdicaoId('')
+    setSubcategoriaEdicaoId('')
+    setEscopoEdicao('este')
+  }
+
+  const obterRelacionados = (lancamento, escopo) => {
+    if (!lancamentos) return []
+
+    const chave = lancamento.parcelamentoId
+      ? 'parcelamentoId'
+      : lancamento.recorrenciaId
+        ? 'recorrenciaId'
+        : null
+
+    if (!chave || escopo === 'este') {
+      return [lancamento]
+    }
+
+    const valorChave = lancamento[chave]
+
+    let relacionados = lancamentos.filter(
+      (item) => !item.deletedAt && item[chave] && item[chave] === valorChave
+    )
+
+    if (escopo === 'a_partir') {
+      relacionados = relacionados.filter((item) => {
+        if (chave === 'parcelamentoId') {
+          return Number(item.parcelaAtual || 0) >= Number(lancamento.parcelaAtual || 0)
+        }
+
+        return String(item.dataCompetencia || '') >= String(lancamento.dataCompetencia || '')
+      })
+    }
+
+    return relacionados.length > 0 ? relacionados : [lancamento]
+  }
+
+  const salvarEdicao = async () => {
+    if (!editor?.lancamento) return
+
+    const lancamento = editor.lancamento
+    const agora = agoraISO()
+    const registros = obterRelacionados(lancamento, escopoEdicao)
+
+    let alteracoes = null
+
+    if (editor.tipo === 'descricao') {
+      const descricaoFinal = descricaoEdicao.trim()
+
+      if (!descricaoFinal) {
+        alert('Informe uma descrição válida.')
+        return
+      }
+
+      alteracoes = {
+        descricao: descricaoFinal,
+        updatedAt: agora,
+        syncStatus: 'pending'
+      }
+    }
+
+    if (editor.tipo === 'valor') {
+      const valorFinal = moedaParaNumero(valorEdicao)
+
+      if (!valorFinal || valorFinal <= 0) {
+        alert('Informe um valor válido.')
+        return
+      }
+
+      alteracoes = {
+        valor: valorFinal,
+        updatedAt: agora,
+        syncStatus: 'pending'
+      }
+    }
+
+    if (editor.tipo === 'categoria') {
+      if (!categoriaEdicaoId) {
+        alert('Selecione uma categoria.')
+        return
+      }
+
+      if (!subcategoriaEdicaoId) {
+        alert('Selecione uma subcategoria.')
+        return
+      }
+
+      alteracoes = {
+        categoriaId: Number(categoriaEdicaoId),
+        subcategoriaId: Number(subcategoriaEdicaoId),
+        updatedAt: agora,
+        syncStatus: 'pending'
+      }
+    }
+
+    if (!alteracoes) return
+
+    for (const item of registros) {
+      await db.lancamentos.update(item.id, alteracoes)
+    }
+
+    agendarSync()
+    fecharEditor()
+  }
+
+  const possuiRelacionados = Boolean(editor?.lancamento?.parcelamentoId || editor?.lancamento?.recorrenciaId)
+
+  const categoriasEditor = useMemo(() => {
+    if (!categorias || !editor?.lancamento) return []
+
+    return categorias.filter(
+      (categoria) =>
+        categoria.tipo === editor.lancamento.tipo ||
+        categoria.tipo === 'ambos'
+    )
+  }, [categorias, editor])
+
+  const subcategoriasEditor = useMemo(() => {
+    if (!subcategorias || !categoriaEdicaoId) return []
+
+    return subcategorias.filter(
+      (subcategoria) => subcategoria.categoriaId === Number(categoriaEdicaoId)
+    )
+  }, [subcategorias, categoriaEdicaoId])
 
   if (!lancamentos || !categorias || !subcategorias || !cartoes) {
     return (
@@ -337,6 +507,9 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
               itens={itens}
               expandidoId={expandidoId}
               setExpandidoId={setExpandidoId}
+              onEditarDescricao={abrirEditorDescricao}
+              onEditarValor={abrirEditorValor}
+              onEditarCategoria={abrirEditorCategoria}
             />
           </div>
         ))}
@@ -349,6 +522,30 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           </CardPremium>
         )}
       </section>
+
+      {editor && (
+        <EditorRapido
+          editor={editor}
+          descricaoEdicao={descricaoEdicao}
+          setDescricaoEdicao={setDescricaoEdicao}
+          valorEdicao={valorEdicao}
+          setValorEdicao={setValorEdicao}
+          categoriaEdicaoId={categoriaEdicaoId}
+          setCategoriaEdicaoId={(valor) => {
+            setCategoriaEdicaoId(valor)
+            setSubcategoriaEdicaoId('')
+          }}
+          subcategoriaEdicaoId={subcategoriaEdicaoId}
+          setSubcategoriaEdicaoId={setSubcategoriaEdicaoId}
+          categoriasEditor={categoriasEditor}
+          subcategoriasEditor={subcategoriasEditor}
+          escopoEdicao={escopoEdicao}
+          setEscopoEdicao={setEscopoEdicao}
+          possuiRelacionados={possuiRelacionados}
+          onSalvar={salvarEdicao}
+          onFechar={fecharEditor}
+        />
+      )}
     </div>
   )
 }
@@ -382,7 +579,14 @@ function ResumoTopo({ titulo, valor, positivo = false, semBorda = false }) {
   )
 }
 
-function GrupoExtratos({ itens, expandidoId, setExpandidoId }) {
+function GrupoExtratos({
+  itens,
+  expandidoId,
+  setExpandidoId,
+  onEditarDescricao,
+  onEditarValor,
+  onEditarCategoria
+}) {
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       {itens.map((lancamento, index) => (
@@ -394,13 +598,24 @@ function GrupoExtratos({ itens, expandidoId, setExpandidoId }) {
           onToggle={() =>
             setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
           }
+          onEditarDescricao={onEditarDescricao}
+          onEditarValor={onEditarValor}
+          onEditarCategoria={onEditarCategoria}
         />
       ))}
     </CardPremium>
   )
 }
 
-function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
+function CardExtrato({
+  lancamento,
+  expandido,
+  onToggle,
+  ultimo,
+  onEditarDescricao,
+  onEditarValor,
+  onEditarCategoria
+}) {
   const positivo = lancamento.tipo === 'receita'
 
   const alternarStatus = async () => {
@@ -443,18 +658,32 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
         </div>
 
         <div className="min-w-0 overflow-hidden">
-          <p className="truncate text-[12.5px] font-black leading-[14px] text-[#F4FFF8]">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onEditarDescricao(lancamento)
+            }}
+            className="block max-w-full truncate text-left text-[12.5px] font-black leading-[14px] text-[#F4FFF8]"
+          >
             {lancamento.descricao}
             {lancamento.parcelaAtual && lancamento.totalParcelas
               ? ` · ${lancamento.parcelaAtual}/${lancamento.totalParcelas}`
               : ''}
             {lancamento.recorrente ? ' · Fixa mensal' : ''}
-          </p>
+          </button>
 
-          <p className="mt-[1px] truncate text-[10.5px] leading-[12px] text-[#B5CFC1]">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onEditarCategoria(lancamento)
+            }}
+            className="mt-[1px] block max-w-full truncate text-left text-[10.5px] leading-[12px] text-[#B5CFC1]"
+          >
             {lancamento.categoria?.nome || 'Sem categoria'}
             {lancamento.subcategoria?.nome ? ` • ${lancamento.subcategoria.nome}` : ''}
-          </p>
+          </button>
 
           <p className="mt-[1px] truncate text-[10px] leading-[11px] text-[#91A99C]">
             {formatarMetodo(lancamento.metodoPagamento)}
@@ -462,7 +691,14 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
           </p>
         </div>
 
-        <div className="shrink-0 text-right">
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onEditarValor(lancamento)
+          }}
+          className="shrink-0 text-right"
+        >
           <p className={`whitespace-nowrap text-[12.5px] font-black leading-[14px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
             {positivo ? '+' : '-'} {formatarMoeda(lancamento.valor)}
           </p>
@@ -473,7 +709,7 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
           >
             {lancamento.status}
           </p>
-        </div>
+        </button>
 
         <ChevronDown
           size={13}
@@ -515,5 +751,175 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
         </div>
       </div>
     </div>
+  )
+}
+
+function EditorRapido({
+  editor,
+  descricaoEdicao,
+  setDescricaoEdicao,
+  valorEdicao,
+  setValorEdicao,
+  categoriaEdicaoId,
+  setCategoriaEdicaoId,
+  subcategoriaEdicaoId,
+  setSubcategoriaEdicaoId,
+  categoriasEditor,
+  subcategoriasEditor,
+  escopoEdicao,
+  setEscopoEdicao,
+  possuiRelacionados,
+  onSalvar,
+  onFechar
+}) {
+  const titulo = {
+    descricao: 'Editar descrição',
+    valor: 'Editar valor',
+    categoria: 'Editar categoria'
+  }[editor.tipo]
+
+  return (
+    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C3D2E] bg-[#03130C] p-4 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3AF2A1]">
+              Edição rápida
+            </p>
+            <h2 className="mt-1 text-xl font-black text-[#F4FFF8]">
+              {titulo}
+            </h2>
+          </div>
+
+          <button
+            onClick={onFechar}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#1C3D2E] bg-black/40 text-[#91A99C]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          {editor.tipo === 'descricao' && (
+            <input
+              autoFocus
+              value={descricaoEdicao}
+              onChange={(event) => setDescricaoEdicao(event.target.value)}
+              className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+            />
+          )}
+
+          {editor.tipo === 'valor' && (
+            <input
+              autoFocus
+              value={valorEdicao}
+              inputMode="numeric"
+              onChange={(event) => setValorEdicao(formatarCampoMoeda(event.target.value))}
+              className="min-h-[52px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-center text-xl font-black text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+            />
+          )}
+
+          {editor.tipo === 'categoria' && (
+            <>
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
+                  Categoria
+                </span>
+
+                <select
+                  value={categoriaEdicaoId}
+                  onChange={(event) => setCategoriaEdicaoId(event.target.value)}
+                  className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+                >
+                  <option value="">Selecione</option>
+                  {categoriasEditor.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              <label className="block">
+                <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
+                  Subcategoria
+                </span>
+
+                <select
+                  value={subcategoriaEdicaoId}
+                  onChange={(event) => setSubcategoriaEdicaoId(event.target.value)}
+                  className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+                >
+                  <option value="">Selecione</option>
+                  {subcategoriasEditor.map((subcategoria) => (
+                    <option key={subcategoria.id} value={subcategoria.id}>
+                      {subcategoria.nome}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </>
+          )}
+
+          {possuiRelacionados && (
+            <div className="rounded-3xl border border-[#1C3D2E] bg-black/35 p-2">
+              <p className="mb-2 px-2 text-xs font-black text-[#91A99C]">
+                Deseja alterar:
+              </p>
+
+              <div className="grid gap-2">
+                <OpcaoEscopo
+                  ativo={escopoEdicao === 'este'}
+                  onClick={() => setEscopoEdicao('este')}
+                >
+                  Somente este lançamento
+                </OpcaoEscopo>
+
+                {editor.tipo === 'valor' && (
+                  <OpcaoEscopo
+                    ativo={escopoEdicao === 'a_partir'}
+                    onClick={() => setEscopoEdicao('a_partir')}
+                  >
+                    A partir deste lançamento
+                  </OpcaoEscopo>
+                )}
+
+                <OpcaoEscopo
+                  ativo={escopoEdicao === 'todos'}
+                  onClick={() => setEscopoEdicao('todos')}
+                >
+                  Todos os lançamentos relacionados
+                </OpcaoEscopo>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={onSalvar}
+            className="min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] text-sm font-black text-white shadow-[0_0_24px_rgba(58,242,161,0.22)] active:scale-[0.98]"
+          >
+            Salvar alteração
+          </button>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function OpcaoEscopo({ ativo, onClick, children }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`
+        min-h-[40px] rounded-2xl border px-3 text-left text-xs font-black transition active:scale-[0.98]
+        ${
+          ativo
+            ? 'border-[#3AF2A1]/50 bg-[#3AF2A1]/10 text-[#3AF2A1]'
+            : 'border-[#1C3D2E] bg-black/35 text-[#91A99C]'
+        }
+      `}
+    >
+      {children}
+    </button>
   )
 }
