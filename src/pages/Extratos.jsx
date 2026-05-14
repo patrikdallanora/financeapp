@@ -2,19 +2,20 @@ import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowLeft,
+  CheckCircle2,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  CheckCircle2,
+  Filter,
   Search,
   Trash2,
+  X,
   XCircle
 } from 'lucide-react'
 
 import { db, agoraISO, softDelete } from '../db/database'
 import { agendarSync } from '../sync/syncManager'
 import { CardPremium } from '../components/CardPremium'
-import { FiltroSegmentado } from '../components/FiltroSegmentado'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
 
@@ -36,10 +37,7 @@ const normalizarTexto = (texto) => {
 const formatarMes = (mesRef) => {
   const [ano, mes] = mesRef.split('-').map(Number)
   const data = new Date(ano, mes - 1, 1)
-
-  const nomeMes = data.toLocaleDateString('pt-BR', {
-    month: 'long'
-  })
+  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'long' })
 
   return `${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${String(ano).slice(-2)}`
 }
@@ -47,6 +45,7 @@ const formatarMes = (mesRef) => {
 const alterarMes = (mesRef, deslocamento) => {
   const [ano, mes] = mesRef.split('-').map(Number)
   const data = new Date(ano, mes - 1 + deslocamento, 1)
+
   return data.toISOString().slice(0, 7)
 }
 
@@ -61,13 +60,36 @@ const formatarDataGrupo = (dataISO) => {
   if (dataISO === ontem) return 'Ontem'
 
   const [ano, mes, dia] = dataISO.split('-')
-  return `${dia}/${mes}/${ano}`
+  return `${dia}/${mes}`
 }
+
+const formatarMetodo = (metodo) => {
+  const mapa = {
+    pix: 'pix',
+    dinheiro: 'dinheiro',
+    cartao: 'cartão'
+  }
+
+  return mapa[metodo] || metodo || ''
+}
+
+const OPCOES_FILTRO = [
+  { valor: 'todos', label: 'Todos' },
+  { valor: 'receita', label: 'Receitas' },
+  { valor: 'despesa', label: 'Despesas' },
+  { valor: 'pendente', label: 'Pendentes' },
+  { valor: 'pago', label: 'Pagos' },
+  { valor: 'pix', label: 'PIX' },
+  { valor: 'dinheiro', label: 'Dinheiro' },
+  { valor: 'cartao', label: 'Cartão' }
+]
 
 export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [mesAtual, setMesAtual] = useState(new Date().toISOString().slice(0, 7))
   const [filtro, setFiltro] = useState(filtroInicial || 'todos')
   const [busca, setBusca] = useState('')
+  const [buscaAberta, setBuscaAberta] = useState(false)
+  const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
 
   const lancamentos = useLiveQuery(async () => {
@@ -155,8 +177,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     return {
       receitas,
       despesas,
-      saldo: receitas - despesas,
-      total: lancamentosFiltrados.length
+      saldo: receitas - despesas
     }
   }, [lancamentosFiltrados])
 
@@ -185,103 +206,138 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   }
 
   return (
-    <div className="space-y-4 pb-24">
-      <button
-        onClick={onVoltar}
-        className="flex items-center gap-2 text-sm font-black text-[#91A99C]"
-      >
-        <ArrowLeft size={18} />
-        Voltar
-      </button>
+    <div className="space-y-3 pb-24">
+      <div className="flex items-start gap-3">
+        <button
+          onClick={onVoltar}
+          className="mt-1 flex h-9 w-9 shrink-0 items-center justify-center rounded-2xl text-[#D8E6DE] active:scale-95"
+        >
+          <ArrowLeft size={26} />
+        </button>
 
-      <TopoTela
-        titulo="Extratos"
-        subtitulo="Histórico financeiro filtrado e organizado por dia."
-      />
+        <div>
+          <h1 className="text-3xl font-black leading-8 tracking-tight text-[#F4FFF8]">
+            Extratos
+          </h1>
+          <p className="mt-0.5 text-sm text-[#91A99C]">
+            Histórico organizado por dia
+          </p>
+        </div>
+      </div>
 
-      <CardPremium className="space-y-4">
-        <div className="flex items-center justify-between gap-3">
-          <button
-            onClick={() => setMesAtual((atual) => alterarMes(atual, -1))}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#1C2A24] bg-[#030504] text-[#91A99C]"
-          >
-            <ChevronLeft size={18} />
+      <CardPremium className="space-y-2.5 rounded-[24px] border-[#1C3D2E] bg-[#03130C]/90 p-3 shadow-[0_0_30px_rgba(58,242,161,0.08)]">
+        <div className="grid grid-cols-[44px_1fr_44px_44px_44px] gap-2">
+          <BotaoIcone onClick={() => setMesAtual((atual) => alterarMes(atual, -1))}>
+            <ChevronLeft size={24} />
+          </BotaoIcone>
+
+          <button className="flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-[#1C3D2E] bg-black/45 px-3 text-center text-base font-black text-[#F4FFF8]">
+            {formatarMes(mesAtual)}
+            <ChevronDown size={17} className="text-[#91A99C]" />
           </button>
 
-          <div className="text-center">
-            <p className="text-xs font-semibold text-[#91A99C]">Período</p>
-            <p className="text-lg font-black text-[#F4FFF8]">{formatarMes(mesAtual)}</p>
+          <BotaoIcone onClick={() => setMesAtual((atual) => alterarMes(atual, 1))}>
+            <ChevronRight size={24} />
+          </BotaoIcone>
+
+          <BotaoIcone
+            ativo={buscaAberta || Boolean(busca)}
+            onClick={() => {
+              setBuscaAberta((atual) => !atual)
+              setFiltrosAbertos(false)
+            }}
+          >
+            {buscaAberta ? <X size={20} /> : <Search size={23} />}
+          </BotaoIcone>
+
+          <BotaoIcone
+            ativo={filtro !== 'todos'}
+            onClick={() => {
+              setFiltrosAbertos((atual) => !atual)
+              setBuscaAberta(false)
+            }}
+          >
+            <span className="relative">
+              <Filter size={22} />
+              {filtro !== 'todos' && (
+                <span className="absolute -right-1 -top-1 h-2.5 w-2.5 rounded-full bg-[#3AF2A1]" />
+              )}
+            </span>
+          </BotaoIcone>
+        </div>
+
+        {buscaAberta && (
+          <div className="relative">
+            <Search
+              size={16}
+              className="absolute left-4 top-1/2 -translate-y-1/2 text-[#587367]"
+            />
+
+            <input
+              autoFocus
+              value={busca}
+              onChange={(event) => setBusca(event.target.value)}
+              placeholder="Buscar descrição, categoria, cartão..."
+              className="min-h-[44px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 py-2.5 pl-10 pr-4 text-sm text-[#F4FFF8] outline-none placeholder:text-[#587367] focus:border-[#3AF2A1]"
+            />
           </div>
+        )}
 
-          <button
-            onClick={() => setMesAtual((atual) => alterarMes(atual, 1))}
-            className="flex h-11 w-11 items-center justify-center rounded-2xl border border-[#1C2A24] bg-[#030504] text-[#91A99C]"
-          >
-            <ChevronRight size={18} />
-          </button>
+        {filtrosAbertos && (
+          <div className="rounded-3xl border border-[#1C3D2E] bg-black/45 p-2">
+            <div className="grid grid-cols-2 gap-2">
+              {OPCOES_FILTRO.map((opcao) => {
+                const ativo = filtro === opcao.valor
+
+                return (
+                  <button
+                    key={opcao.valor}
+                    onClick={() => {
+                      setFiltro(opcao.valor)
+                      setFiltrosAbertos(false)
+                    }}
+                    className={`
+                      min-h-[38px] rounded-2xl border px-3 text-left text-xs font-black transition active:scale-[0.98]
+                      ${
+                        ativo
+                          ? 'border-[#3AF2A1]/50 bg-[#3AF2A1]/10 text-[#3AF2A1]'
+                          : 'border-[#1C3D2E] bg-[#030504] text-[#91A99C]'
+                      }
+                    `}
+                  >
+                    {opcao.label}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-[#1C3D2E] bg-black/40">
+          <ResumoTopo titulo="Receitas" valor={resumo.receitas} positivo />
+          <ResumoTopo titulo="Despesas" valor={resumo.despesas} />
+          <ResumoTopo titulo="Saldo" valor={resumo.saldo} positivo={resumo.saldo >= 0} semBorda />
         </div>
-
-        <div className="grid grid-cols-3 gap-2">
-          <MiniResumo titulo="Receitas" valor={resumo.receitas} positivo />
-          <MiniResumo titulo="Despesas" valor={resumo.despesas} />
-          <MiniResumo titulo="Saldo" valor={resumo.saldo} positivo={resumo.saldo >= 0} />
-        </div>
-
-        <div className="relative">
-          <Search
-            size={17}
-            className="absolute left-4 top-1/2 -translate-y-1/2 text-[#587367]"
-          />
-
-          <input
-            value={busca}
-            onChange={(event) => setBusca(event.target.value)}
-            placeholder="Buscar lançamento"
-            className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] py-3 pl-11 pr-4 text-sm text-[#F4FFF8] outline-none placeholder:text-[#587367] focus:border-[#3AF2A1] focus:ring-2 focus:ring-[#3AF2A1]/10"
-          />
-        </div>
-
-        <FiltroSegmentado
-          valor={filtro}
-          onChange={setFiltro}
-          opcoes={[
-            { valor: 'todos', label: 'Todos' },
-            { valor: 'receita', label: 'Receitas' },
-            { valor: 'despesa', label: 'Despesas' },
-            { valor: 'pendente', label: 'Pendentes' },
-            { valor: 'pago', label: 'Pagos' },
-            { valor: 'pix', label: 'PIX' },
-            { valor: 'dinheiro', label: 'Dinheiro' },
-            { valor: 'cartao', label: 'Cartão' }
-          ]}
-        />
       </CardPremium>
 
-      <section className="space-y-5">
+      <section className="space-y-4">
         {grupos.map(([data, itens]) => (
-          <div key={data} className="space-y-2">
-            <div className="flex items-center justify-between px-1">
-              <p className="text-xs font-black uppercase tracking-[0.18em] text-[#91A99C]">
+          <div key={data} className="space-y-1.5">
+            <div className="flex items-end justify-between px-2">
+              <p className="text-xl font-black leading-6 tracking-tight text-[#F4FFF8]">
                 {formatarDataGrupo(data)}
               </p>
 
-              <p className="text-xs font-semibold text-[#587367]">
-                {itens.length} {itens.length === 1 ? 'item' : 'itens'}
+              <p className="text-sm font-semibold text-[#3AF2A1]">
+                {itens.length} {itens.length === 1 ? 'lançamento' : 'lançamentos'}
               </p>
             </div>
 
-            <div className="space-y-2">
-              {itens.map((lancamento) => (
-                <CardExtrato
-                  key={lancamento.id}
-                  lancamento={lancamento}
-                  expandido={expandidoId === lancamento.id}
-                  onToggle={() =>
-                    setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
-                  }
-                />
-              ))}
-            </div>
+            <GrupoExtratos
+              itens={itens}
+              expandidoId={expandidoId}
+              setExpandidoId={setExpandidoId}
+            />
           </div>
         ))}
 
@@ -297,18 +353,54 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   )
 }
 
-function MiniResumo({ titulo, valor, positivo = false }) {
+function BotaoIcone({ children, onClick, ativo = false }) {
   return (
-    <div className="rounded-2xl border border-[#1C2A24] bg-[#030504]/70 p-3">
-      <p className="text-[11px] font-semibold text-[#91A99C]">{titulo}</p>
-      <p className={`mt-1 truncate text-xs font-black ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
+    <button
+      onClick={onClick}
+      className={`
+        flex min-h-[44px] items-center justify-center rounded-2xl border transition active:scale-95
+        ${
+          ativo
+            ? 'border-[#3AF2A1]/50 bg-[#3AF2A1]/10 text-[#3AF2A1]'
+            : 'border-[#1C3D2E] bg-black/45 text-[#F4FFF8]'
+        }
+      `}
+    >
+      {children}
+    </button>
+  )
+}
+
+function ResumoTopo({ titulo, valor, positivo = false, semBorda = false }) {
+  return (
+    <div className={`px-2 py-2 text-center ${semBorda ? '' : 'border-r border-[#1C3D2E]'}`}>
+      <p className="text-[11px] leading-4 text-[#D8E6DE]">{titulo}</p>
+      <p className={`mt-0.5 text-sm font-black leading-4 ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
         {formatarMoeda(valor)}
       </p>
     </div>
   )
 }
 
-function CardExtrato({ lancamento, expandido, onToggle }) {
+function GrupoExtratos({ itens, expandidoId, setExpandidoId }) {
+  return (
+    <CardPremium className="overflow-hidden rounded-[22px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_28px_rgba(58,242,161,0.07)]">
+      {itens.map((lancamento, index) => (
+        <CardExtrato
+          key={lancamento.id}
+          lancamento={lancamento}
+          ultimo={index === itens.length - 1}
+          expandido={expandidoId === lancamento.id}
+          onToggle={() =>
+            setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
+          }
+        />
+      ))}
+    </CardPremium>
+  )
+}
+
+function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
   const positivo = lancamento.tipo === 'receita'
 
   const alternarStatus = async () => {
@@ -334,20 +426,20 @@ function CardExtrato({ lancamento, expandido, onToggle }) {
   }
 
   return (
-    <CardPremium className="overflow-hidden p-0">
+    <div className={ultimo ? '' : 'border-b border-[#1C3D2E]/80'}>
       <button
         onClick={onToggle}
-        className="flex w-full items-center gap-3 p-4 text-left active:scale-[0.99]"
+        className="grid w-full grid-cols-[42px_1fr_auto_18px] items-center gap-2.5 px-3 py-2 text-left active:scale-[0.995]"
       >
         <IconeCategoria
           icone={lancamento.categoria?.icone}
           cor={lancamento.categoria?.cor}
-          tamanho="sm"
+          tamanho="xs"
           ativo
         />
 
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-black text-[#F4FFF8]">
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-black leading-[15px] text-[#F4FFF8]">
             {lancamento.descricao}
             {lancamento.parcelaAtual && lancamento.totalParcelas
               ? ` · ${lancamento.parcelaAtual}/${lancamento.totalParcelas}`
@@ -355,31 +447,33 @@ function CardExtrato({ lancamento, expandido, onToggle }) {
             {lancamento.recorrente ? ' · Fixa mensal' : ''}
           </p>
 
-          <p className="mt-1 truncate text-xs text-[#91A99C]">
+          <p className="mt-0.5 truncate text-[11px] leading-[13px] text-[#B5CFC1]">
             {lancamento.categoria?.nome || 'Sem categoria'}
-            {lancamento.subcategoria?.nome ? ` · ${lancamento.subcategoria.nome}` : ''}
+            {lancamento.subcategoria?.nome ? ` • ${lancamento.subcategoria.nome}` : ''}
           </p>
 
-          <p className="mt-1 truncate text-[11px] text-[#587367]">
-            {lancamento.metodoPagamento}
-            {lancamento.cartao ? ` · ${lancamento.cartao.nome}` : ''}
-            {lancamento.faturaRef ? ` · ${lancamento.faturaRef}` : ''}
+          <p className="mt-0.5 truncate text-[10px] leading-[12px] text-[#91A99C]">
+            {formatarMetodo(lancamento.metodoPagamento)}
+            {lancamento.cartao ? ` • ${lancamento.cartao.nome}` : ''}
           </p>
         </div>
 
-        <div className="text-right">
-          <p className={`text-sm font-black ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
+        <div className="shrink-0 text-right">
+          <p className={`text-[13px] font-black leading-[15px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
             {positivo ? '+' : '-'} {formatarMoeda(lancamento.valor)}
           </p>
 
-          <p className="mt-1 text-[11px] font-semibold capitalize text-[#91A99C]">
+          <p className={`mt-0.5 text-[10px] font-semibold capitalize leading-[12px] ${
+            lancamento.status === 'pendente' ? 'text-yellow-400' : 'text-[#B5CFC1]'
+          }`}
+          >
             {lancamento.status}
           </p>
         </div>
 
         <ChevronDown
-          size={18}
-          className={`shrink-0 text-[#91A99C] transition ${expandido ? 'rotate-180' : ''}`}
+          size={15}
+          className={`shrink-0 text-[#B5CFC1] transition ${expandido ? 'rotate-180' : ''}`}
         />
       </button>
 
@@ -389,9 +483,9 @@ function CardExtrato({ lancamento, expandido, onToggle }) {
         }`}
       >
         <div className="overflow-hidden">
-          <div className="space-y-3 border-t border-[#1C2A24] p-4 pt-3">
+          <div className="space-y-1.5 px-3 pb-2">
             {lancamento.observacoes && (
-              <p className="rounded-2xl border border-[#1C2A24] bg-[#030504]/70 p-3 text-xs leading-5 text-[#91A99C]">
+              <p className="rounded-2xl border border-[#1C3D2E] bg-black/35 p-2 text-[11px] leading-4 text-[#91A99C]">
                 {lancamento.observacoes}
               </p>
             )}
@@ -399,23 +493,23 @@ function CardExtrato({ lancamento, expandido, onToggle }) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={alternarStatus}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-[#1C2A24] bg-[#030504] text-xs font-black text-[#3AF2A1] active:scale-[0.98]"
+                className="flex min-h-[34px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
               >
-                {lancamento.status === 'pago' ? <XCircle size={15} /> : <CheckCircle2 size={15} />}
-                {lancamento.status === 'pago' ? 'Marcar pendente' : 'Marcar pago'}
+                {lancamento.status === 'pago' ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
+                {lancamento.status === 'pago' ? 'Pendente' : 'Pago'}
               </button>
 
               <button
                 onClick={excluir}
-                className="flex min-h-[44px] items-center justify-center gap-2 rounded-2xl border border-red-900/60 bg-red-950/30 text-xs font-black text-red-300 active:scale-[0.98]"
+                className="flex min-h-[34px] items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
               >
-                <Trash2 size={15} />
+                <Trash2 size={13} />
                 Excluir
               </button>
             </div>
           </div>
         </div>
       </div>
-    </CardPremium>
+    </div>
   )
 }
