@@ -320,7 +320,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         </div>
       </CardPremium>
 
-      <section className="space-y-4">
+      <section className="space-y-3">
         {grupos.map(([data, itens]) => (
           <div key={data} className="space-y-1.5">
             <div className="flex items-end justify-between px-2">
@@ -384,7 +384,7 @@ function ResumoTopo({ titulo, valor, positivo = false, semBorda = false }) {
 
 function GrupoExtratos({ itens, expandidoId, setExpandidoId }) {
   return (
-    <CardPremium className="overflow-hidden rounded-[22px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_28px_rgba(58,242,161,0.07)]">
+    <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       {itens.map((lancamento, index) => (
         <CardExtrato
           key={lancamento.id}
@@ -426,20 +426,24 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
   }
 
   return (
-    <div className={ultimo ? '' : 'border-b border-[#1C3D2E]/80'}>
+    <div className={ultimo ? '' : 'border-b border-[#1C3D2E]/75'}>
       <button
         onClick={onToggle}
-        className="grid w-full grid-cols-[42px_1fr_auto_18px] items-center gap-2.5 px-3 py-2 text-left active:scale-[0.995]"
+        className="grid w-full grid-cols-[54px_minmax(0,1fr)_auto_14px] items-center gap-1 px-3 py-0 text-left active:scale-[0.995]"
       >
-        <IconeCategoria
-          icone={lancamento.categoria?.icone}
-          cor={lancamento.categoria?.cor}
-          tamanho="xs"
-          ativo
-        />
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
+          <div className="origin-center scale-[0.90]">
+            <IconeCategoria
+              icone={lancamento.categoria?.icone}
+              cor={lancamento.categoria?.cor}
+              tamanho="sm"
+              ativo
+            />
+          </div>
+        </div>
 
-        <div className="min-w-0">
-          <p className="truncate text-[13px] font-black leading-[15px] text-[#F4FFF8]">
+        <div className="min-w-0 overflow-hidden">
+          <p className="truncate text-[12.5px] font-black leading-[14px] text-[#F4FFF8]">
             {lancamento.descricao}
             {lancamento.parcelaAtual && lancamento.totalParcelas
               ? ` · ${lancamento.parcelaAtual}/${lancamento.totalParcelas}`
@@ -447,23 +451,23 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
             {lancamento.recorrente ? ' · Fixa mensal' : ''}
           </p>
 
-          <p className="mt-0.5 truncate text-[11px] leading-[13px] text-[#B5CFC1]">
+          <p className="mt-[1px] truncate text-[10.5px] leading-[12px] text-[#B5CFC1]">
             {lancamento.categoria?.nome || 'Sem categoria'}
             {lancamento.subcategoria?.nome ? ` • ${lancamento.subcategoria.nome}` : ''}
           </p>
 
-          <p className="mt-0.5 truncate text-[10px] leading-[12px] text-[#91A99C]">
+          <p className="mt-[1px] truncate text-[10px] leading-[11px] text-[#91A99C]">
             {formatarMetodo(lancamento.metodoPagamento)}
             {lancamento.cartao ? ` • ${lancamento.cartao.nome}` : ''}
           </p>
         </div>
 
         <div className="shrink-0 text-right">
-          <p className={`text-[13px] font-black leading-[15px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
+          <p className={`whitespace-nowrap text-[12.5px] font-black leading-[14px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
             {positivo ? '+' : '-'} {formatarMoeda(lancamento.valor)}
           </p>
 
-          <p className={`mt-0.5 text-[10px] font-semibold capitalize leading-[12px] ${
+          <p className={`mt-[1px] text-[10px] font-semibold capitalize leading-[11px] ${
             lancamento.status === 'pendente' ? 'text-yellow-400' : 'text-[#B5CFC1]'
           }`}
           >
@@ -472,7 +476,7 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
         </div>
 
         <ChevronDown
-          size={15}
+          size={13}
           className={`shrink-0 text-[#B5CFC1] transition ${expandido ? 'rotate-180' : ''}`}
         />
       </button>
@@ -493,7 +497,7 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
             <div className="grid grid-cols-2 gap-2">
               <button
                 onClick={alternarStatus}
-                className="flex min-h-[34px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
+                className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
               >
                 {lancamento.status === 'pago' ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
                 {lancamento.status === 'pago' ? 'Pendente' : 'Pago'}
@@ -501,7 +505,7 @@ function CardExtrato({ lancamento, expandido, onToggle, ultimo }) {
 
               <button
                 onClick={excluir}
-                className="flex min-h-[34px] items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
+                className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
               >
                 <Trash2 size={13} />
                 Excluir
