@@ -723,14 +723,14 @@ function CardExtrato({
         }`}
       >
         <div className="overflow-hidden">
-          <div className="space-y-1.5 px-3 pb-2">
+          <div className="space-y-1.5 px-3 pb-1 pt-1.5">
             {lancamento.observacoes && (
               <p className="rounded-2xl border border-[#1C3D2E] bg-black/35 p-2 text-[11px] leading-4 text-[#91A99C]">
                 {lancamento.observacoes}
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-2">
+            <div className="grid grid-cols-2 gap-2 translate-y-1">
               <button
                 onClick={alternarStatus}
                 className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
