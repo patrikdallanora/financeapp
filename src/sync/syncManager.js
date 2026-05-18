@@ -67,16 +67,31 @@ const obterMapaUltimosPulls = () => {
   }, {})
 }
 
-const obterChaveUltimoPullInicial = () => {
-  return 'financeapp_ultimo_pull_inicial'
+const CHAVE_META_LOCAL = 'financeapp_sync_meta_local'
+const CHAVE_ULTIMO_PULL_INICIAL = 'financeapp_ultimo_pull_inicial'
+
+const obterMetaLocal = () => {
+  const bruto = localStorage.getItem(CHAVE_META_LOCAL)
+
+  if (!bruto) return {}
+
+  try {
+    return JSON.parse(bruto)
+  } catch {
+    return {}
+  }
+}
+
+const salvarMetaLocal = (meta) => {
+  localStorage.setItem(CHAVE_META_LOCAL, JSON.stringify(meta || {}))
 }
 
 const obterUltimoPullInicial = () => {
-  return localStorage.getItem(obterChaveUltimoPullInicial()) || ''
+  return localStorage.getItem(CHAVE_ULTIMO_PULL_INICIAL) || ''
 }
 
 const salvarUltimoPullInicial = () => {
-  localStorage.setItem(obterChaveUltimoPullInicial(), new Date().toISOString())
+  localStorage.setItem(CHAVE_ULTIMO_PULL_INICIAL, new Date().toISOString())
 }
 
 const lerRespostaJson = async (resposta) => {
@@ -248,6 +263,30 @@ const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
   }
 }
 
+const checkChangesSync = async () => {
+  const url = new URL(API_URL)
+
+  url.searchParams.set('modo', 'checkChanges')
+  url.searchParams.set('secret', API_SECRET || '')
+  url.searchParams.set('meta', JSON.stringify(obterMetaLocal()))
+
+  const resposta = await fetch(url.toString(), {
+    method: 'GET'
+  })
+
+  const dados = await lerRespostaJson(resposta)
+
+  if (!resposta.ok || dados.erro) {
+    throw new Error(dados.erro || `Erro HTTP ${resposta.status}`)
+  }
+
+  if (!dados.sucesso || !dados.changes || !dados.meta) {
+    throw new Error('Resposta inesperada no checkChanges.')
+  }
+
+  return dados
+}
+
 export const pushSync = async () => {
   const resultado = {
     sucesso: true,
@@ -381,7 +420,7 @@ export const pullSync = async () => {
   return resultado
 }
 
-export const pullBatchSync = async () => {
+export const pullBatchSync = async (tabelasSolicitadas = TABELAS) => {
   const resultado = {
     sucesso: true,
     etapa: 'pullBatch',
@@ -396,6 +435,7 @@ export const pullBatchSync = async () => {
     'updatedAfterMap',
     JSON.stringify(obterMapaUltimosPulls())
   )
+  url.searchParams.set('tabelas', tabelasSolicitadas.join(','))
 
   const resposta = await fetch(url.toString(), {
     method: 'GET'
@@ -411,7 +451,7 @@ export const pullBatchSync = async () => {
     throw new Error('Resposta inesperada no pull em lote.')
   }
 
-  for (const tabela of TABELAS) {
+  for (const tabela of tabelasSolicitadas) {
     try {
       const remotos = dados.tabelas[tabela] || []
       const { infoTabela, maiorUpdatedAt } = await aplicarRegistrosRemotosNaTabela(tabela, remotos)
@@ -435,6 +475,10 @@ export const pullBatchSync = async () => {
 
       console.error(`Erro ao aplicar pullBatch da tabela ${tabela}:`, err)
     }
+  }
+
+  if (dados.meta) {
+    salvarMetaLocal(dados.meta)
   }
 
   return resultado
@@ -503,7 +547,29 @@ export const executarPullInicial = async () => {
   })
 
   try {
-    const pull = await pullBatchSync()
+    const check = await checkChangesSync()
+
+    const tabelasComMudanca = TABELAS.filter((tabela) => check.changes[tabela])
+
+    if (tabelasComMudanca.length === 0) {
+      salvarMetaLocal(check.meta)
+      salvarUltimoPullInicial()
+
+      atualizarEstadoGlobalSync({
+        sincronizando: false,
+        ultimaSincronizacao: new Date().toISOString(),
+        ultimoErro: null
+      })
+
+      return {
+        sucesso: true,
+        etapa: 'pull-inicial',
+        semAlteracoes: true,
+        check
+      }
+    }
+
+    const pull = await pullBatchSync(tabelasComMudanca)
 
     atualizarEstadoGlobalSync({
       sincronizando: false,
@@ -520,6 +586,7 @@ export const executarPullInicial = async () => {
     return {
       sucesso: pull.sucesso,
       etapa: 'pull-inicial',
+      tabelasComMudanca,
       pull
     }
   } catch (err) {
