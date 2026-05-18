@@ -174,7 +174,7 @@ function App() {
 
 function LoadingPullInicial() {
   return (
-    <div className="fixed inset-x-0 top-4 z-[90] flex justify-center px-4 pointer-events-none">
+    <div className="pointer-events-none fixed inset-x-0 bottom-24 z-[90] flex justify-center px-4">
       <div className="flex items-center gap-3 rounded-3xl border border-[#1C3D2E] bg-[#03130C]/95 px-4 py-3 shadow-[0_0_30px_rgba(58,242,161,0.16)] backdrop-blur-xl">
         <div className="h-4 w-4 animate-pulse rounded-full bg-[#3AF2A1] shadow-[0_0_18px_rgba(58,242,161,0.9)]" />
 
@@ -183,7 +183,7 @@ function LoadingPullInicial() {
             Atualizando dados
           </p>
           <p className="text-[11px] text-[#91A99C]">
-            Buscando alterações mais recentes...
+            Buscando alterações recentes...
           </p>
         </div>
       </div>

@@ -60,6 +60,13 @@ const salvarUltimoPull = (tabela, dataISO) => {
   localStorage.setItem(obterChaveUltimoPull(tabela), dataISO)
 }
 
+const obterMapaUltimosPulls = () => {
+  return TABELAS.reduce((mapa, tabela) => {
+    mapa[tabela] = obterUltimoPull(tabela)
+    return mapa
+  }, {})
+}
+
 const obterChaveUltimoPullInicial = () => {
   return 'financeapp_ultimo_pull_inicial'
 }
@@ -161,6 +168,86 @@ const prepararRegistroParaLocal = (registro) => {
   }
 }
 
+const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
+  const infoTabela = {
+    tabela,
+    recebidos: Array.isArray(remotos) ? remotos.length : 0,
+    novos: 0,
+    atualizados: 0,
+    conflitos: 0,
+    erro: null
+  }
+
+  if (!Array.isArray(remotos) || remotos.length === 0) {
+    return {
+      infoTabela,
+      maiorUpdatedAt: obterUltimoPull(tabela)
+    }
+  }
+
+  let maiorUpdatedAt = obterUltimoPull(tabela)
+
+  const locais = await db[tabela].toArray()
+  const mapaLocaisPorUuid = new Map()
+
+  for (const local of locais) {
+    if (local.uuid) {
+      mapaLocaisPorUuid.set(local.uuid, local)
+    }
+  }
+
+  for (const remoto of remotos) {
+    if (!remoto.uuid) continue
+
+    if (remoto.updatedAt && (!maiorUpdatedAt || remoto.updatedAt > maiorUpdatedAt)) {
+      maiorUpdatedAt = remoto.updatedAt
+    }
+
+    const local = mapaLocaisPorUuid.get(remoto.uuid)
+    const remotoNormalizado = prepararRegistroParaLocal(remoto)
+
+    if (!local) {
+      await db[tabela].add(remotoNormalizado)
+      infoTabela.novos++
+      continue
+    }
+
+    const localTemAlteracao = local.syncStatus === 'pending'
+
+    const remotoMaisNovo =
+      remoto.updatedAt &&
+      local.updatedAt &&
+      new Date(remoto.updatedAt).getTime() > new Date(local.updatedAt).getTime()
+
+    if (localTemAlteracao && remotoMaisNovo) {
+      await db[tabela]
+        .where('uuid')
+        .equals(remoto.uuid)
+        .modify({
+          syncStatus: 'conflict'
+        })
+
+      await registrarLogSync(tabela, remoto.uuid, 'conflict', local, remoto)
+      infoTabela.conflitos++
+      continue
+    }
+
+    if (!localTemAlteracao && remotoMaisNovo) {
+      await db[tabela]
+        .where('uuid')
+        .equals(remoto.uuid)
+        .modify(remotoNormalizado)
+
+      infoTabela.atualizados++
+    }
+  }
+
+  return {
+    infoTabela,
+    maiorUpdatedAt
+  }
+}
+
 export const pushSync = async () => {
   const resultado = {
     sucesso: true,
@@ -243,15 +330,6 @@ export const pullSync = async () => {
   }
 
   for (const tabela of TABELAS) {
-    const infoTabela = {
-      tabela,
-      recebidos: 0,
-      novos: 0,
-      atualizados: 0,
-      conflitos: 0,
-      erro: null
-    }
-
     try {
       const updatedAfter = obterUltimoPull(tabela)
 
@@ -277,70 +355,86 @@ export const pullSync = async () => {
         throw new Error(`Resposta inesperada no pull da tabela ${tabela}`)
       }
 
-      infoTabela.recebidos = remotos.length
-
-      let maiorUpdatedAt = updatedAfter
-
-      for (const remoto of remotos) {
-        if (!remoto.uuid) continue
-
-        const local = await db[tabela]
-          .where('uuid')
-          .equals(remoto.uuid)
-          .first()
-
-        if (remoto.updatedAt && (!maiorUpdatedAt || remoto.updatedAt > maiorUpdatedAt)) {
-          maiorUpdatedAt = remoto.updatedAt
-        }
-
-        const remotoNormalizado = prepararRegistroParaLocal(remoto)
-
-        if (!local) {
-          await db[tabela].add(remotoNormalizado)
-          infoTabela.novos++
-          continue
-        }
-
-        const localTemAlteracao = local.syncStatus === 'pending'
-
-        const remotoMaisNovo =
-          remoto.updatedAt &&
-          local.updatedAt &&
-          new Date(remoto.updatedAt).getTime() > new Date(local.updatedAt).getTime()
-
-        if (localTemAlteracao && remotoMaisNovo) {
-          await db[tabela]
-            .where('uuid')
-            .equals(remoto.uuid)
-            .modify({
-              syncStatus: 'conflict'
-            })
-
-          await registrarLogSync(tabela, remoto.uuid, 'conflict', local, remoto)
-          infoTabela.conflitos++
-          continue
-        }
-
-        if (!localTemAlteracao && remotoMaisNovo) {
-          await db[tabela]
-            .where('uuid')
-            .equals(remoto.uuid)
-            .modify(remotoNormalizado)
-
-          infoTabela.atualizados++
-        }
-      }
+      const { infoTabela, maiorUpdatedAt } = await aplicarRegistrosRemotosNaTabela(tabela, remotos)
 
       if (maiorUpdatedAt) {
         salvarUltimoPull(tabela, maiorUpdatedAt)
       }
+
+      resultado.tabelas.push(infoTabela)
     } catch (err) {
-      infoTabela.erro = err.message
       resultado.sucesso = false
+
+      resultado.tabelas.push({
+        tabela,
+        recebidos: 0,
+        novos: 0,
+        atualizados: 0,
+        conflitos: 0,
+        erro: err.message
+      })
+
       console.error(`Erro no pull da tabela ${tabela}:`, err)
     }
+  }
 
-    resultado.tabelas.push(infoTabela)
+  return resultado
+}
+
+export const pullBatchSync = async () => {
+  const resultado = {
+    sucesso: true,
+    etapa: 'pullBatch',
+    tabelas: []
+  }
+
+  const url = new URL(API_URL)
+
+  url.searchParams.set('modo', 'pullBatch')
+  url.searchParams.set('secret', API_SECRET || '')
+  url.searchParams.set(
+    'updatedAfterMap',
+    JSON.stringify(obterMapaUltimosPulls())
+  )
+
+  const resposta = await fetch(url.toString(), {
+    method: 'GET'
+  })
+
+  const dados = await lerRespostaJson(resposta)
+
+  if (!resposta.ok || dados.erro) {
+    throw new Error(dados.erro || `Erro HTTP ${resposta.status}`)
+  }
+
+  if (!dados.sucesso || !dados.tabelas) {
+    throw new Error('Resposta inesperada no pull em lote.')
+  }
+
+  for (const tabela of TABELAS) {
+    try {
+      const remotos = dados.tabelas[tabela] || []
+      const { infoTabela, maiorUpdatedAt } = await aplicarRegistrosRemotosNaTabela(tabela, remotos)
+
+      if (maiorUpdatedAt) {
+        salvarUltimoPull(tabela, maiorUpdatedAt)
+      }
+
+      resultado.tabelas.push(infoTabela)
+    } catch (err) {
+      resultado.sucesso = false
+
+      resultado.tabelas.push({
+        tabela,
+        recebidos: 0,
+        novos: 0,
+        atualizados: 0,
+        conflitos: 0,
+        erro: err.message
+      })
+
+      console.error(`Erro ao aplicar pullBatch da tabela ${tabela}:`, err)
+    }
   }
 
   return resultado
@@ -409,7 +503,7 @@ export const executarPullInicial = async () => {
   })
 
   try {
-    const pull = await pullSync()
+    const pull = await pullBatchSync()
 
     atualizarEstadoGlobalSync({
       sincronizando: false,
