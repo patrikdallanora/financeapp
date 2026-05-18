@@ -15,8 +15,10 @@ const TABELAS = [
 
 const INTERVALO_SYNC = 1000 * 60
 const DEBOUNCE_SYNC = 2500
+const INTERVALO_MINIMO_PULL_INICIAL = 1000 * 20
 
 let sincronizando = false
+let pullInicialExecutando = false
 let intervaloAtivo = null
 let debounceTimer = null
 let autoSyncIniciado = false
@@ -34,13 +36,21 @@ const obterDeviceId = () => {
 
 const verificarConfiguracaoSync = () => {
   if (!API_URL || API_URL === 'undefined') {
-    return { ok: false, erro: 'VITE_SHEETS_API_URL não configurada.' }
+    return {
+      ok: false,
+      erro: 'VITE_SHEETS_API_URL não configurada.'
+    }
   }
 
-  return { ok: true, erro: null }
+  return {
+    ok: true,
+    erro: null
+  }
 }
 
-const obterChaveUltimoPull = (tabela) => `financeapp_ultimo_pull_${tabela}`
+const obterChaveUltimoPull = (tabela) => {
+  return `financeapp_ultimo_pull_${tabela}`
+}
 
 const obterUltimoPull = (tabela) => {
   return localStorage.getItem(obterChaveUltimoPull(tabela)) || ''
@@ -48,6 +58,18 @@ const obterUltimoPull = (tabela) => {
 
 const salvarUltimoPull = (tabela, dataISO) => {
   localStorage.setItem(obterChaveUltimoPull(tabela), dataISO)
+}
+
+const obterChaveUltimoPullInicial = () => {
+  return 'financeapp_ultimo_pull_inicial'
+}
+
+const obterUltimoPullInicial = () => {
+  return localStorage.getItem(obterChaveUltimoPullInicial()) || ''
+}
+
+const salvarUltimoPullInicial = () => {
+  localStorage.setItem(obterChaveUltimoPullInicial(), new Date().toISOString())
 }
 
 const lerRespostaJson = async (resposta) => {
@@ -324,6 +346,104 @@ export const pullSync = async () => {
   return resultado
 }
 
+export const executarPullInicial = async () => {
+  const config = verificarConfiguracaoSync()
+
+  if (!config.ok) {
+    atualizarEstadoGlobalSync({
+      sincronizando: false,
+      ultimoErro: config.erro
+    })
+
+    return {
+      sucesso: false,
+      erro: config.erro,
+      etapa: 'pull-inicial'
+    }
+  }
+
+  if (!navigator.onLine) {
+    atualizarEstadoGlobalSync({
+      online: false,
+      sincronizando: false,
+      ultimoErro: null
+    })
+
+    return {
+      sucesso: false,
+      erro: 'offline',
+      etapa: 'pull-inicial'
+    }
+  }
+
+  if (pullInicialExecutando) {
+    return {
+      sucesso: true,
+      ignorado: true,
+      motivo: 'Pull inicial já em andamento.',
+      etapa: 'pull-inicial'
+    }
+  }
+
+  const ultimoPullInicial = obterUltimoPullInicial()
+
+  if (ultimoPullInicial) {
+    const tempoDesdeUltimoPull = Date.now() - new Date(ultimoPullInicial).getTime()
+
+    if (tempoDesdeUltimoPull < INTERVALO_MINIMO_PULL_INICIAL) {
+      return {
+        sucesso: true,
+        ignorado: true,
+        motivo: 'Pull inicial executado recentemente.',
+        etapa: 'pull-inicial'
+      }
+    }
+  }
+
+  pullInicialExecutando = true
+
+  atualizarEstadoGlobalSync({
+    online: true,
+    sincronizando: true,
+    ultimoErro: null
+  })
+
+  try {
+    const pull = await pullSync()
+
+    atualizarEstadoGlobalSync({
+      sincronizando: false,
+      ultimaSincronizacao: pull.sucesso
+        ? new Date().toISOString()
+        : obterStatusSync().ultimaSincronizacao,
+      ultimoErro: pull.sucesso ? null : 'Falha ao atualizar dados na abertura.'
+    })
+
+    if (pull.sucesso) {
+      salvarUltimoPullInicial()
+    }
+
+    return {
+      sucesso: pull.sucesso,
+      etapa: 'pull-inicial',
+      pull
+    }
+  } catch (err) {
+    atualizarEstadoGlobalSync({
+      sincronizando: false,
+      ultimoErro: err.message
+    })
+
+    return {
+      sucesso: false,
+      erro: err.message,
+      etapa: 'pull-inicial'
+    }
+  } finally {
+    pullInicialExecutando = false
+  }
+}
+
 export const executarSync = async () => {
   const config = verificarConfiguracaoSync()
 
@@ -416,12 +536,14 @@ export const agendarSync = () => {
   }, DEBOUNCE_SYNC)
 }
 
-export const iniciarAutoSync = () => {
+export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
   if (autoSyncIniciado) return
 
   autoSyncIniciado = true
 
-  executarSync()
+  if (executarAoIniciar) {
+    executarSync()
+  }
 
   window.addEventListener('online', () => {
     atualizarEstadoGlobalSync({
@@ -443,7 +565,7 @@ export const iniciarAutoSync = () => {
 
   document.addEventListener('visibilitychange', () => {
     if (document.visibilityState === 'visible' && navigator.onLine) {
-      executarSync()
+      executarPullInicial()
     }
   })
 
