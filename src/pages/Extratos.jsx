@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowLeft,
@@ -50,6 +50,25 @@ const normalizarTexto = (texto) => {
     .trim()
 }
 
+const obterFiltroInicial = (filtroInicial) => {
+  if (typeof filtroInicial === 'object' && filtroInicial?.filtro) {
+    return filtroInicial.filtro
+  }
+
+  return filtroInicial || 'todos'
+}
+
+const obterCategoriaInicial = (filtroInicial) => {
+  if (typeof filtroInicial === 'object' && filtroInicial?.filtro === 'categoria') {
+    return {
+      id: filtroInicial.categoriaId || null,
+      nome: filtroInicial.categoriaNome || ''
+    }
+  }
+
+  return null
+}
+
 const formatarMes = (mesRef) => {
   const [ano, mes] = mesRef.split('-').map(Number)
   const data = new Date(ano, mes - 1, 1)
@@ -88,7 +107,8 @@ const OPCOES_FILTRO = [
 
 export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [mesAtual, setMesAtual] = useState(new Date().toISOString().slice(0, 7))
-  const [filtro, setFiltro] = useState(filtroInicial || 'todos')
+  const [filtro, setFiltro] = useState(obterFiltroInicial(filtroInicial))
+  const [filtroCategoria, setFiltroCategoria] = useState(obterCategoriaInicial(filtroInicial))
   const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
@@ -100,6 +120,15 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [categoriaEdicaoId, setCategoriaEdicaoId] = useState('')
   const [subcategoriaEdicaoId, setSubcategoriaEdicaoId] = useState('')
   const [escopoEdicao, setEscopoEdicao] = useState('este')
+
+  useEffect(() => {
+    setFiltro(obterFiltroInicial(filtroInicial))
+    setFiltroCategoria(obterCategoriaInicial(filtroInicial))
+    setBusca('')
+    setBuscaAberta(false)
+    setFiltrosAbertos(false)
+    setExpandidoId(null)
+  }, [filtroInicial])
 
   const lancamentos = useLiveQuery(async () => {
     const todos = await db.lancamentos.toArray()
@@ -146,6 +175,10 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     return dadosEnriquecidos
       .filter((lancamento) => normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual))
       .filter((lancamento) => {
+        if (filtro === 'categoria') {
+          return Number(lancamento.categoriaId) === Number(filtroCategoria?.id)
+        }
+
         if (filtro === 'todos') return true
         if (filtro === 'receita') return lancamento.tipo === 'receita'
         if (filtro === 'despesa') return lancamento.tipo === 'despesa'
@@ -175,7 +208,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
         return dataB.localeCompare(dataA)
       })
-  }, [dadosEnriquecidos, mesAtual, filtro, busca])
+  }, [dadosEnriquecidos, mesAtual, filtro, filtroCategoria, busca])
 
   const resumo = useMemo(() => {
     const receitas = lancamentosFiltrados
@@ -208,6 +241,11 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
     return Array.from(mapa.entries())
   }, [lancamentosFiltrados])
+
+  const limparFiltroCategoria = () => {
+    setFiltro('todos')
+    setFiltroCategoria(null)
+  }
 
   const abrirEditorDescricao = (lancamento) => {
     setEditor({ tipo: 'descricao', lancamento })
@@ -426,6 +464,26 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           </BotaoIcone>
         </div>
 
+        {filtro === 'categoria' && filtroCategoria?.nome && (
+          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#1C3D2E] bg-black/35 px-3 py-2">
+            <div className="min-w-0">
+              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3AF2A1]">
+                Categoria filtrada
+              </p>
+              <p className="truncate text-xs font-black text-[#F4FFF8]">
+                {filtroCategoria.nome}
+              </p>
+            </div>
+
+            <button
+              onClick={limparFiltroCategoria}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#1C3D2E] bg-[#030504] text-[#91A99C] active:scale-95"
+            >
+              <X size={15} />
+            </button>
+          </div>
+        )}
+
         {buscaAberta && (
           <div className="relative">
             <Search
@@ -454,6 +512,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
                     key={opcao.valor}
                     onClick={() => {
                       setFiltro(opcao.valor)
+                      setFiltroCategoria(null)
                       setFiltrosAbertos(false)
                     }}
                     className={`
@@ -578,7 +637,7 @@ function GrupoExtratos({
   onEditarCategoria
 }) {
   return (
-    <div className="space-y-1.5">
+    <div className="space-y-3">
       {itens.map((lancamento) => (
         <CardExtrato
           key={lancamento.id}

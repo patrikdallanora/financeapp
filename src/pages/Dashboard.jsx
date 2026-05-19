@@ -1,7 +1,17 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowDown, ArrowUp, CreditCard, Plus, X } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  BarChart3,
+  CreditCard,
+  List,
+  Plus,
+  X
+} from 'lucide-react'
+
 import { db } from '../db/database'
+import { IconeCategoria } from '../components/IconeCategoria'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -10,10 +20,33 @@ const formatarMoeda = (valor) => {
   })
 }
 
+const formatarNumeroCurto = (valor) => {
+  const numero = Number(valor || 0)
+
+  if (numero >= 1000) {
+    return `${(numero / 1000).toLocaleString('pt-BR', {
+      maximumFractionDigits: 1
+    })} mil`
+  }
+
+  return numero.toLocaleString('pt-BR', {
+    maximumFractionDigits: 0
+  })
+}
+
 const obterMesAtual = () => new Date().toISOString().slice(0, 7)
+
+const normalizarTexto = (texto) => {
+  return String(texto || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .trim()
+}
 
 export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const [menuAberto, setMenuAberto] = useState(false)
+  const [modoCategorias, setModoCategorias] = useState('lista')
   const mesAtual = obterMesAtual()
 
   const lancamentos = useLiveQuery(async () => {
@@ -21,9 +54,24 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     return todos.filter((lancamento) => !lancamento.deletedAt)
   }, [])
 
-  const doMes = (lancamentos || []).filter((lancamento) =>
-    lancamento.dataCompetencia?.startsWith(mesAtual)
-  )
+  const categorias = useLiveQuery(async () => {
+    const todas = await db.categorias.toArray()
+    return todas.filter((categoria) => !categoria.deletedAt)
+  }, [])
+
+  const doMes = useMemo(() => {
+    if (!lancamentos || !categorias) return []
+
+    return lancamentos
+      .filter((lancamento) => lancamento.dataCompetencia?.startsWith(mesAtual))
+      .filter((lancamento) => {
+        const categoria = categorias.find(
+          (item) => Number(item.id) === Number(lancamento.categoriaId)
+        )
+
+        return normalizarTexto(categoria?.nome) !== 'reembolsos'
+      })
+  }, [lancamentos, categorias, mesAtual])
 
   const totalReceitas = doMes
     .filter((lancamento) => lancamento.tipo === 'receita')
@@ -35,14 +83,60 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
 
   const saldo = totalReceitas - totalDespesas
 
+  const gastosPorCategoria = useMemo(() => {
+    if (!categorias) return []
+
+    const mapa = new Map()
+
+    doMes
+      .filter((lancamento) => lancamento.tipo === 'despesa')
+      .forEach((lancamento) => {
+        const categoria = categorias.find(
+          (item) => Number(item.id) === Number(lancamento.categoriaId)
+        )
+
+        if (!categoria) return
+        if (normalizarTexto(categoria.nome) === 'reembolsos') return
+
+        const chave = Number(categoria.id)
+        const atual = mapa.get(chave) || {
+          id: categoria.id,
+          nome: categoria.nome,
+          cor: categoria.cor,
+          icone: categoria.icone,
+          total: 0
+        }
+
+        atual.total += Number(lancamento.valor || 0)
+        mapa.set(chave, atual)
+      })
+
+    const lista = Array.from(mapa.values()).sort((a, b) => b.total - a.total)
+    const maiorValor = lista[0]?.total || 0
+
+    return lista.map((item) => ({
+      ...item,
+      percentual: totalDespesas > 0 ? (item.total / totalDespesas) * 100 : 0,
+      largura: maiorValor > 0 ? (item.total / maiorValor) * 100 : 0
+    }))
+  }, [doMes, categorias, totalDespesas])
+
   const escolherLancamento = (config) => {
     setMenuAberto(false)
     onNovoLancamento(config)
   }
 
+  const abrirCategoriaNoExtrato = (categoria) => {
+    onAbrirExtratos({
+      filtro: 'categoria',
+      categoriaId: categoria.id,
+      categoriaNome: categoria.nome
+    })
+  }
+
   return (
     <div className="relative space-y-4 pb-24">
-      <header className="mb-5">
+      <header className="mb-4">
         <p className="mb-1 text-xs font-black uppercase tracking-[0.24em] text-[#3AF2A1]">
           FinanceApp
         </p>
@@ -56,7 +150,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         </p>
       </header>
 
-      <div className="grid gap-3">
+      <div className="grid grid-cols-3 gap-2">
         <CardResumo
           titulo="Receitas"
           valor={totalReceitas}
@@ -77,6 +171,14 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
           tipo={saldo >= 0 ? 'positivo' : 'negativo'}
         />
       </div>
+
+      <CardAnaliseCategorias
+        modo={modoCategorias}
+        setModo={setModoCategorias}
+        categorias={gastosPorCategoria}
+        total={totalDespesas}
+        onSelecionarCategoria={abrirCategoriaNoExtrato}
+      />
 
       {menuAberto && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 px-4 pb-28 backdrop-blur-sm">
@@ -161,20 +263,211 @@ function CardResumo({ titulo, valor, tipo, onClick }) {
     <Component
       onClick={onClick}
       className={`
-        card-premium w-full rounded-[28px] p-4 text-left
+        card-premium min-w-0 rounded-[22px] px-2.5 py-3 text-left
         ${onClick ? 'transition active:scale-[0.99]' : ''}
       `}
     >
-      <p className="text-xs font-semibold text-[#91A99C]">{titulo}</p>
+      <p className="truncate text-[10px] font-semibold text-[#91A99C]">
+        {titulo}
+      </p>
 
       <p
-        className={`mt-2 text-2xl font-black ${
+        className={`mt-1 truncate text-[13px] font-black leading-4 ${
           positivo ? 'text-[#3AF2A1]' : 'text-red-300'
         }`}
       >
         {formatarMoeda(valor)}
       </p>
     </Component>
+  )
+}
+
+function CardAnaliseCategorias({
+  modo,
+  setModo,
+  categorias,
+  total,
+  onSelecionarCategoria
+}) {
+  return (
+    <section className="card-premium rounded-[28px] p-4">
+      <div className="mb-4 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-[#3AF2A1]">
+            Análise
+          </p>
+
+          <h2 className="mt-1 text-lg font-black text-[#F4FFF8]">
+            Gastos por categoria
+          </h2>
+
+          <p className="mt-1 text-xs text-[#91A99C]">
+            Total analisado: {formatarMoeda(total)}
+          </p>
+        </div>
+
+        <div className="flex rounded-2xl border border-[#1C2A24] bg-[#030504]/80 p-1">
+          <button
+            onClick={() => setModo('grafico')}
+            className={`
+              flex h-9 w-9 items-center justify-center rounded-xl transition
+              ${
+                modo === 'grafico'
+                  ? 'bg-[#3AF2A1]/15 text-[#3AF2A1]'
+                  : 'text-[#91A99C]'
+              }
+            `}
+          >
+            <BarChart3 size={18} />
+          </button>
+
+          <button
+            onClick={() => setModo('lista')}
+            className={`
+              flex h-9 w-9 items-center justify-center rounded-xl transition
+              ${
+                modo === 'lista'
+                  ? 'bg-[#3AF2A1]/15 text-[#3AF2A1]'
+                  : 'text-[#91A99C]'
+              }
+            `}
+          >
+            <List size={18} />
+          </button>
+        </div>
+      </div>
+
+      {categorias.length === 0 ? (
+        <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-4">
+          <p className="text-sm font-semibold text-[#91A99C]">
+            Nenhuma despesa encontrada no mês atual.
+          </p>
+        </div>
+      ) : modo === 'grafico' ? (
+        <GraficoBarrasCategorias
+          categorias={categorias}
+          onSelecionarCategoria={onSelecionarCategoria}
+        />
+      ) : (
+        <ListaCategoriasAtual
+          categorias={categorias}
+          onSelecionarCategoria={onSelecionarCategoria}
+        />
+      )}
+    </section>
+  )
+}
+
+function ListaCategoriasAtual({ categorias, onSelecionarCategoria }) {
+  return (
+    <div className="space-y-3">
+      {categorias.slice(0, 6).map((categoria) => (
+        <button
+          key={categoria.id}
+          onClick={() => onSelecionarCategoria(categoria)}
+          className="w-full rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3 text-left transition active:scale-[0.99]"
+        >
+          <div className="mb-2 flex items-center justify-between gap-3">
+            <div className="flex min-w-0 items-center gap-2">
+              <IconeCategoria
+                icone={categoria.icone}
+                cor={categoria.cor}
+                tamanho="xs"
+                ativo
+              />
+
+              <p className="truncate text-sm font-black text-[#F4FFF8]">
+                {categoria.nome}
+              </p>
+            </div>
+
+            <p className="shrink-0 text-xs font-black text-red-300">
+              {formatarMoeda(categoria.total)}
+            </p>
+          </div>
+
+          <div className="h-2 overflow-hidden rounded-full bg-[#102018]">
+            <div
+              className="h-full rounded-full"
+              style={{
+                width: `${Math.max(categoria.largura || 0, 4)}%`,
+                backgroundColor: categoria.cor || '#3AF2A1',
+                boxShadow: `0 0 14px ${categoria.cor || '#3AF2A1'}55`
+              }}
+            />
+          </div>
+        </button>
+      ))}
+    </div>
+  )
+}
+
+function GraficoBarrasCategorias({ categorias, onSelecionarCategoria }) {
+  const maiorValor = categorias[0]?.total || 0
+  const meioValor = maiorValor / 2
+
+  return (
+    <div className="rounded-3xl border border-[#1C2A24] bg-[#151515] px-3 pb-3 pt-4">
+      <div className="relative">
+        <div className="pointer-events-none absolute bottom-0 left-[112px] top-0 w-px bg-[#7A7A7A]/60" />
+        <div className="pointer-events-none absolute bottom-0 left-[calc(112px+((100%-112px)/2))] top-0 w-px bg-[#7A7A7A]/45" />
+        <div className="pointer-events-none absolute bottom-0 right-0 top-0 w-px bg-[#7A7A7A]/60" />
+
+        <div className="relative space-y-4">
+          {categorias.map((categoria) => (
+            <LinhaGraficoCategoria
+              key={categoria.id}
+              categoria={categoria}
+              onSelecionarCategoria={onSelecionarCategoria}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="mt-3 grid grid-cols-[112px_minmax(0,1fr)] text-[11px] font-semibold text-[#9CA3AF]">
+        <div />
+        <div className="grid grid-cols-3">
+          <p className="text-left">0</p>
+          <p className="text-center">{formatarNumeroCurto(meioValor)}</p>
+          <p className="text-right">{formatarNumeroCurto(maiorValor)}</p>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+
+function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
+  const cor = categoria.cor || '#3AF2A1'
+
+  const percentualTexto = categoria.percentual.toLocaleString('pt-BR', {
+    maximumFractionDigits: 1
+  })
+
+  return (
+    <button
+      onClick={() => onSelecionarCategoria(categoria)}
+      className="grid w-full grid-cols-[112px_minmax(0,1fr)] items-center text-left active:scale-[0.995]"
+    >
+      <p className="truncate pr-3 text-right text-[14px] font-medium text-[#9CA3AF]">
+        {categoria.nome}
+      </p>
+
+      <div className="relative h-8">
+        <div
+          className="flex h-8 items-center justify-end rounded-r-full px-3 transition-all duration-500"
+          style={{
+            width: `${Math.max(categoria.largura || 0, 7)}%`,
+            backgroundColor: cor,
+            boxShadow: `0 0 18px ${cor}40`
+          }}
+        >
+          <span className="whitespace-nowrap text-[13px] font-black text-[#242424]">
+            {percentualTexto}%
+          </span>
+        </div>
+      </div>
+    </button>
   )
 }
 
