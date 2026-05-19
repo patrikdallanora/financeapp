@@ -18,6 +18,7 @@ import { agendarSync } from '../sync/syncManager'
 import { CardPremium } from '../components/CardPremium'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
+import { formatarDataGrupo, normalizarDataCivil } from '../utils/datas'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -62,20 +63,6 @@ const alterarMes = (mesRef, deslocamento) => {
   const data = new Date(ano, mes - 1 + deslocamento, 1)
 
   return data.toISOString().slice(0, 7)
-}
-
-const formatarDataGrupo = (dataISO) => {
-  const hoje = new Date().toISOString().slice(0, 10)
-
-  const ontemData = new Date()
-  ontemData.setDate(ontemData.getDate() - 1)
-  const ontem = ontemData.toISOString().slice(0, 10)
-
-  if (dataISO === hoje) return 'Hoje'
-  if (dataISO === ontem) return 'Ontem'
-
-  const [, mes, dia] = dataISO.split('-')
-  return `${dia}/${mes}`
 }
 
 const formatarMetodo = (metodo) => {
@@ -144,6 +131,8 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
       return {
         ...lancamento,
+        dataCompetencia: normalizarDataCivil(lancamento.dataCompetencia),
+        dataPagamento: normalizarDataCivil(lancamento.dataPagamento),
         categoria,
         subcategoria,
         cartao
@@ -155,7 +144,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     const termo = normalizarTexto(busca)
 
     return dadosEnriquecidos
-      .filter((lancamento) => lancamento.dataCompetencia?.startsWith(mesAtual))
+      .filter((lancamento) => normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual))
       .filter((lancamento) => {
         if (filtro === 'todos') return true
         if (filtro === 'receita') return lancamento.tipo === 'receita'
@@ -181,9 +170,10 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         return normalizarTexto(texto).includes(termo)
       })
       .sort((a, b) => {
-        const dataA = new Date(a.dataCompetencia || 0).getTime()
-        const dataB = new Date(b.dataCompetencia || 0).getTime()
-        return dataB - dataA
+        const dataA = normalizarDataCivil(a.dataCompetencia)
+        const dataB = normalizarDataCivil(b.dataCompetencia)
+
+        return dataB.localeCompare(dataA)
       })
   }, [dadosEnriquecidos, mesAtual, filtro, busca])
 
@@ -207,7 +197,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     const mapa = new Map()
 
     for (const lancamento of lancamentosFiltrados) {
-      const data = lancamento.dataCompetencia || 'Sem data'
+      const data = normalizarDataCivil(lancamento.dataCompetencia) || 'Sem data'
 
       if (!mapa.has(data)) {
         mapa.set(data, [])
@@ -272,7 +262,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           return Number(item.parcelaAtual || 0) >= Number(lancamento.parcelaAtual || 0)
         }
 
-        return String(item.dataCompetencia || '') >= String(lancamento.dataCompetencia || '')
+        return normalizarDataCivil(item.dataCompetencia) >= normalizarDataCivil(lancamento.dataCompetencia)
       })
     }
 
@@ -588,12 +578,11 @@ function GrupoExtratos({
   onEditarCategoria
 }) {
   return (
-    <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
-      {itens.map((lancamento, index) => (
+    <div className="space-y-1.5">
+      {itens.map((lancamento) => (
         <CardExtrato
           key={lancamento.id}
           lancamento={lancamento}
-          ultimo={index === itens.length - 1}
           expandido={expandidoId === lancamento.id}
           onToggle={() =>
             setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
@@ -603,7 +592,7 @@ function GrupoExtratos({
           onEditarCategoria={onEditarCategoria}
         />
       ))}
-    </CardPremium>
+    </div>
   )
 }
 
@@ -611,7 +600,6 @@ function CardExtrato({
   lancamento,
   expandido,
   onToggle,
-  ultimo,
   onEditarDescricao,
   onEditarValor,
   onEditarCategoria
@@ -623,7 +611,7 @@ function CardExtrato({
 
     await db.lancamentos.update(lancamento.id, {
       status: novoStatus,
-      dataPagamento: novoStatus === 'pago' ? lancamento.dataCompetencia : null,
+      dataPagamento: novoStatus === 'pago' ? normalizarDataCivil(lancamento.dataCompetencia) : null,
       updatedAt: agoraISO(),
       syncStatus: 'pending'
     })
@@ -641,10 +629,10 @@ function CardExtrato({
   }
 
   return (
-    <div className={ultimo ? '' : 'border-b border-[#1C3D2E]/75'}>
+    <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       <button
         onClick={onToggle}
-        className="grid w-full grid-cols-[54px_minmax(0,1fr)_auto_14px] items-center gap-1 px-3 py-0 text-left active:scale-[0.995]"
+        className="grid min-h-[14px] w-full grid-cols-[54px_minmax(0,1fr)_auto_14px] items-center gap-1 px-3 py-0.5 text-left active:scale-[0.995]"
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
           <div className="origin-center scale-[0.90]">
@@ -750,7 +738,7 @@ function CardExtrato({
           </div>
         </div>
       </div>
-    </div>
+    </CardPremium>
   )
 }
 
