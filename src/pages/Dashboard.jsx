@@ -290,8 +290,8 @@ function CardAnaliseCategorias({
   onSelecionarCategoria
 }) {
   return (
-    <section className="card-premium rounded-[28px] p-4">
-      <div className="mb-4 flex items-start justify-between gap-3">
+    <section className="card-premium overflow-hidden rounded-[28px] p-0">
+      <div className="flex items-start justify-between gap-3 border-b border-[#1C2A24] p-4">
         <div>
           <p className="text-xs font-black uppercase tracking-[0.22em] text-[#3AF2A1]">
             Análise
@@ -302,58 +302,73 @@ function CardAnaliseCategorias({
           </h2>
 
           <p className="mt-1 text-xs text-[#91A99C]">
-            Total analisado: {formatarMoeda(total)}
+            Total analisado:{' '}
+            <span className="font-black text-[#3AF2A1]">
+              {formatarMoeda(total)}
+            </span>
           </p>
         </div>
 
-        <div className="flex rounded-2xl border border-[#1C2A24] bg-[#030504]/80 p-1">
+        <div className="grid grid-cols-2 gap-2">
           <button
             onClick={() => setModo('grafico')}
             className={`
-              flex h-9 w-9 items-center justify-center rounded-xl transition
+              relative flex min-h-[58px] min-w-[68px] flex-col items-center justify-center rounded-2xl border text-xs font-black transition active:scale-[0.98]
               ${
                 modo === 'grafico'
-                  ? 'bg-[#3AF2A1]/15 text-[#3AF2A1]'
-                  : 'text-[#91A99C]'
+                  ? 'border-[#3AF2A1]/70 bg-[#3AF2A1]/10 text-[#3AF2A1] shadow-[0_0_20px_rgba(58,242,161,0.12)]'
+                  : 'border-[#1C2A24] bg-[#030504]/80 text-[#91A99C]'
               }
             `}
           >
-            <BarChart3 size={18} />
+            <BarChart3 size={22} />
+            <span className="mt-1">Gráfico</span>
+
+            {modo === 'grafico' && (
+              <span className="absolute -bottom-[1px] h-1 w-8 rounded-t-full bg-[#3AF2A1]" />
+            )}
           </button>
 
           <button
             onClick={() => setModo('lista')}
             className={`
-              flex h-9 w-9 items-center justify-center rounded-xl transition
+              relative flex min-h-[58px] min-w-[68px] flex-col items-center justify-center rounded-2xl border text-xs font-black transition active:scale-[0.98]
               ${
                 modo === 'lista'
-                  ? 'bg-[#3AF2A1]/15 text-[#3AF2A1]'
-                  : 'text-[#91A99C]'
+                  ? 'border-[#3AF2A1]/70 bg-[#3AF2A1]/10 text-[#3AF2A1] shadow-[0_0_20px_rgba(58,242,161,0.12)]'
+                  : 'border-[#1C2A24] bg-[#030504]/80 text-[#91A99C]'
               }
             `}
           >
-            <List size={18} />
+            <List size={22} />
+            <span className="mt-1">Lista</span>
+
+            {modo === 'lista' && (
+              <span className="absolute -bottom-[1px] h-1 w-8 rounded-t-full bg-[#3AF2A1]" />
+            )}
           </button>
         </div>
       </div>
 
-      {categorias.length === 0 ? (
-        <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-4">
-          <p className="text-sm font-semibold text-[#91A99C]">
-            Nenhuma despesa encontrada no mês atual.
-          </p>
-        </div>
-      ) : modo === 'grafico' ? (
-        <GraficoBarrasCategorias
-          categorias={categorias}
-          onSelecionarCategoria={onSelecionarCategoria}
-        />
-      ) : (
-        <ListaCategoriasAtual
-          categorias={categorias}
-          onSelecionarCategoria={onSelecionarCategoria}
-        />
-      )}
+      <div className="p-4">
+        {categorias.length === 0 ? (
+          <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-4">
+            <p className="text-sm font-semibold text-[#91A99C]">
+              Nenhuma despesa encontrada no mês atual.
+            </p>
+          </div>
+        ) : modo === 'grafico' ? (
+          <GraficoBarrasCategorias
+            categorias={categorias}
+            onSelecionarCategoria={onSelecionarCategoria}
+          />
+        ) : (
+          <ListaCategoriasAtual
+            categorias={categorias}
+            onSelecionarCategoria={onSelecionarCategoria}
+          />
+        )}
+      </div>
     </section>
   )
 }
@@ -407,13 +422,13 @@ function GraficoBarrasCategorias({ categorias, onSelecionarCategoria }) {
   const meioValor = maiorValor / 2
 
   return (
-    <div className="rounded-3xl border border-[#1C2A24] bg-[#151515] px-3 pb-3 pt-4">
+    <div className="overflow-hidden rounded-[26px] border border-[#1C2A24] bg-[#151515] px-3 pb-3 pt-4">
       <div className="relative">
-        <div className="pointer-events-none absolute bottom-0 left-[112px] top-0 w-px bg-[#7A7A7A]/60" />
-        <div className="pointer-events-none absolute bottom-0 left-[calc(112px+((100%-112px)/2))] top-0 w-px bg-[#7A7A7A]/45" />
-        <div className="pointer-events-none absolute bottom-0 right-0 top-0 w-px bg-[#7A7A7A]/60" />
+        <div className="pointer-events-none absolute bottom-0 left-[132px] top-0 w-px bg-[#8A8A8A]/55" />
+        <div className="pointer-events-none absolute bottom-0 left-[calc(132px+((100%-132px-42px)/2))] top-0 w-px bg-[#8A8A8A]/35" />
+        <div className="pointer-events-none absolute bottom-0 right-[42px] top-0 w-px bg-[#8A8A8A]/45" />
 
-        <div className="relative space-y-4">
+        <div className="relative space-y-3.5">
           {categorias.map((categoria) => (
             <LinhaGraficoCategoria
               key={categoria.id}
@@ -424,18 +439,20 @@ function GraficoBarrasCategorias({ categorias, onSelecionarCategoria }) {
         </div>
       </div>
 
-      <div className="mt-3 grid grid-cols-[112px_minmax(0,1fr)] text-[11px] font-semibold text-[#9CA3AF]">
+      <div className="mt-3 grid grid-cols-[132px_minmax(0,1fr)_42px] text-[11px] font-semibold text-[#9CA3AF]">
         <div />
+
         <div className="grid grid-cols-3">
           <p className="text-left">0</p>
           <p className="text-center">{formatarNumeroCurto(meioValor)}</p>
           <p className="text-right">{formatarNumeroCurto(maiorValor)}</p>
         </div>
+
+        <div />
       </div>
     </div>
   )
 }
-
 
 function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
   const cor = categoria.cor || '#3AF2A1'
@@ -447,26 +464,35 @@ function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
   return (
     <button
       onClick={() => onSelecionarCategoria(categoria)}
-      className="grid w-full grid-cols-[112px_minmax(0,1fr)] items-center text-left active:scale-[0.995]"
+      className="grid w-full grid-cols-[42px_90px_minmax(0,1fr)_42px] items-center text-left active:scale-[0.995]"
     >
-      <p className="truncate pr-3 text-right text-[14px] font-medium text-[#9CA3AF]">
+      <div className="flex justify-start">
+        <IconeCategoria
+          icone={categoria.icone}
+          cor={cor}
+          tamanho="xs"
+          ativo
+        />
+      </div>
+
+      <p className="truncate pr-3 text-left text-[13px] font-semibold text-[#D8E6DE]">
         {categoria.nome}
       </p>
 
-      <div className="relative h-8">
+      <div className="relative h-7">
         <div
-          className="flex h-8 items-center justify-end rounded-r-full px-3 transition-all duration-500"
+          className="flex h-7 items-center rounded-r-full transition-all duration-500"
           style={{
-            width: `${Math.max(categoria.largura || 0, 7)}%`,
-            backgroundColor: cor,
-            boxShadow: `0 0 18px ${cor}40`
+            width: `${Math.max(categoria.largura || 0, 6)}%`,
+            background: `linear-gradient(90deg, ${cor}, ${cor}dd, ${cor}aa)`,
+            boxShadow: `0 0 18px ${cor}35`
           }}
-        >
-          <span className="whitespace-nowrap text-[13px] font-black text-[#242424]">
-            {percentualTexto}%
-          </span>
-        </div>
+        />
       </div>
+
+      <p className="pl-2 text-right text-[12px] font-black text-[#D8E6DE]">
+        {percentualTexto}%
+      </p>
     </button>
   )
 }
