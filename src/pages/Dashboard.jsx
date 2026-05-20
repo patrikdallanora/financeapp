@@ -387,7 +387,7 @@ function ListaCategoriasAtual({ categorias, onSelecionarCategoria }) {
               <IconeCategoria
                 icone={categoria.icone}
                 cor={categoria.cor}
-                tamanho="xs"
+                tamanho="sm"
                 ativo
               />
 
@@ -470,16 +470,16 @@ function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
         <IconeCategoria
           icone={categoria.icone}
           cor={cor}
-          tamanho="xs"
+          tamanho="sm"
           ativo
         />
       </div>
 
-      <p className="truncate pr-3 text-left text-[13px] font-semibold text-[#D8E6DE]">
+      <p className="truncate pr-3 text-left text-[12px] font-semibold text-[#D8E6DE]">
         {categoria.nome}
       </p>
 
-      <div className="relative h-7">
+      <div className="relative h-">
         <div
           className="flex h-7 items-center rounded-r-full transition-all duration-500"
           style={{
