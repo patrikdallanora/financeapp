@@ -50,10 +50,51 @@ const categoriaEhReembolso = (categoria) => {
   return nome === 'reembolso' || nome === 'reembolsos'
 }
 
+const obterDiaFechamentoCartao = (cartao) => {
+  const candidatos = [
+    cartao?.fechamento,
+    cartao?.diaFechamento,
+    cartao?.diaFechamentoFatura,
+    cartao?.fechamentoFatura
+  ]
+
+  const valor = candidatos.find((item) => Number(item) >= 1 && Number(item) <= 31)
+
+  return valor ? Number(valor) : null
+}
+
+const obterMesReferenciaDashboard = (cartoes = []) => {
+  const hoje = new Date()
+  const anoAtual = hoje.getFullYear()
+  const mesAtual = hoje.getMonth()
+  const diaAtual = hoje.getDate()
+
+  const fechamentos = cartoes
+    .map(obterDiaFechamentoCartao)
+    .filter((dia) => dia >= 1 && dia <= 31)
+
+  if (fechamentos.length === 0) {
+    return obterMesAtual()
+  }
+
+  const menorFechamento = Math.min(...fechamentos)
+  const mesReferencia = diaAtual > menorFechamento ? mesAtual + 1 : mesAtual
+  const dataReferencia = new Date(anoAtual, mesReferencia, 1)
+
+  return dataReferencia.toISOString().slice(0, 7)
+}
+
+const formatarNomeMes = (mesRef) => {
+  const [ano, mes] = mesRef.split('-').map(Number)
+  const data = new Date(ano, mes - 1, 1)
+  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'long' })
+
+  return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
+}
+
 export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [modoCategorias, setModoCategorias] = useState('grafico')
-  const mesAtual = obterMesAtual()
 
   const lancamentos = useLiveQuery(async () => {
     const todos = await db.lancamentos.toArray()
@@ -65,11 +106,30 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     return todas.filter((categoria) => !categoria.deletedAt)
   }, [])
 
+  const cartoes = useLiveQuery(async () => {
+    const todos = await db.cartoes.toArray()
+    return todos.filter((cartao) => !cartao.deletedAt)
+  }, [])
+
+  const mesReferencia = useMemo(() => {
+    return obterMesReferenciaDashboard(cartoes || [])
+  }, [cartoes])
+
+  const nomeMesReferencia = useMemo(() => {
+    return formatarNomeMes(mesReferencia)
+  }, [mesReferencia])
+
   const doMes = useMemo(() => {
     if (!lancamentos || !categorias) return []
 
     return lancamentos
-      .filter((lancamento) => lancamento.dataCompetencia?.startsWith(mesAtual))
+      .filter((lancamento) => {
+        if (lancamento.metodoPagamento === 'cartao') {
+          return String(lancamento.faturaRef || '').startsWith(mesReferencia)
+        }
+
+        return String(lancamento.dataCompetencia || '').startsWith(mesReferencia)
+      })
       .filter((lancamento) => {
         const categoria = categorias.find(
           (item) => Number(item.id) === Number(lancamento.categoriaId)
@@ -77,7 +137,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
 
         return !categoriaEhReembolso(categoria)
       })
-  }, [lancamentos, categorias, mesAtual])
+  }, [lancamentos, categorias, mesReferencia])
 
   const totalReceitas = doMes
     .filter((lancamento) => lancamento.tipo === 'receita')
@@ -152,7 +212,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         </h1>
 
         <p className="mt-1 text-sm text-[#91A99C]">
-          Resumo financeiro do mês atual.
+          Resumo financeiro de {nomeMesReferencia}.
         </p>
       </header>
 
@@ -360,7 +420,7 @@ function CardAnaliseCategorias({
         {categorias.length === 0 ? (
           <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-4">
             <p className="text-sm font-semibold text-[#91A99C]">
-              Nenhuma despesa encontrada no mês atual.
+              Nenhuma despesa encontrada no período.
             </p>
           </div>
         ) : modo === 'grafico' ? (
@@ -485,7 +545,7 @@ function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
         {categoria.nome}
       </p>
 
-      <div className="relative h-">
+      <div className="relative h-7">
         <div
           className="flex h-7 items-center rounded-r-full transition-all duration-500"
           style={{
