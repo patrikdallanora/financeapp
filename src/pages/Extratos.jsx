@@ -900,7 +900,7 @@ function CardFatura({
 
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
-      <div className="grid min-h-[56px] w-full grid-cols-[44px_minmax(0,1fr)_auto_32px] items-center gap-2 px-3 py-2">
+      <div className="grid min-h-[44px] w-full grid-cols-[44px_minmax(0,1fr)_auto_32px] items-center gap-2 px-3 py-0.5">
         <button
           onClick={onAlternarPagamento}
           className={`flex h-9 w-9 items-center justify-center rounded-2xl border transition active:scale-95 ${corStatus}`}
@@ -1041,7 +1041,6 @@ function CardExtrato({
               icone={lancamento.categoria?.icone}
               cor={lancamento.categoria?.cor}
               tamanho="sm"
-              ativo
             />
           </div>
         </div>
