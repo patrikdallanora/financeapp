@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  CreditCard,
   Filter,
   Search,
   Trash2,
@@ -94,6 +95,54 @@ const formatarMetodo = (metodo) => {
   return mapa[metodo] || metodo || ''
 }
 
+const formatarFaturaRef = (faturaRef) => {
+  if (!faturaRef || !String(faturaRef).includes('-')) return 'Fatura'
+
+  const [ano, mes] = String(faturaRef).split('-').map(Number)
+  const data = new Date(ano, mes - 1, 1)
+  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'long' })
+
+  return `${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${String(ano).slice(-2)}`
+}
+
+const obterDiaVencimentoCartao = (cartao) => {
+  const candidatos = [
+    cartao?.vencimento,
+    cartao?.diaVencimento,
+    cartao?.diaVencimentoFatura
+  ]
+
+  const valor = candidatos.find((item) => Number(item) >= 1 && Number(item) <= 31)
+
+  return valor ? Number(valor) : null
+}
+
+const obterDataVencimentoFatura = (cartao, faturaRef) => {
+  if (!cartao || !faturaRef || !String(faturaRef).includes('-')) return null
+
+  const diaVencimento = obterDiaVencimentoCartao(cartao)
+
+  if (!diaVencimento) return null
+
+  const [ano, mes] = String(faturaRef).split('-').map(Number)
+  const ultimoDiaMes = new Date(ano, mes, 0).getDate()
+  const diaFinal = Math.min(diaVencimento, ultimoDiaMes)
+
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(diaFinal).padStart(2, '0')}`
+}
+
+const faturaEstaVencida = (cartao, faturaRef, fechada) => {
+  if (fechada) return false
+
+  const dataVencimento = obterDataVencimentoFatura(cartao, faturaRef)
+
+  if (!dataVencimento) return false
+
+  const hoje = new Date().toISOString().slice(0, 10)
+
+  return hoje > dataVencimento
+}
+
 const OPCOES_FILTRO = [
   { valor: 'todos', label: 'Todos' },
   { valor: 'receita', label: 'Receitas' },
@@ -113,6 +162,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
+  const [faturaExpandidaId, setFaturaExpandidaId] = useState(null)
 
   const [editor, setEditor] = useState(null)
   const [descricaoEdicao, setDescricaoEdicao] = useState('')
@@ -121,6 +171,9 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [subcategoriaEdicaoId, setSubcategoriaEdicaoId] = useState('')
   const [escopoEdicao, setEscopoEdicao] = useState('este')
 
+  const [modalPagamento, setModalPagamento] = useState(null)
+  const [valorPagamentoFatura, setValorPagamentoFatura] = useState('')
+
   useEffect(() => {
     setFiltro(obterFiltroInicial(filtroInicial))
     setFiltroCategoria(obterCategoriaInicial(filtroInicial))
@@ -128,6 +181,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     setBuscaAberta(false)
     setFiltrosAbertos(false)
     setExpandidoId(null)
+    setFaturaExpandidaId(null)
   }, [filtroInicial])
 
   const lancamentos = useLiveQuery(async () => {
@@ -174,12 +228,12 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
     return dadosEnriquecidos
       .filter((lancamento) => {
-  if (lancamento.metodoPagamento === 'cartao') {
-    return String(lancamento.faturaRef || '').startsWith(mesAtual)
-  }
+        if (lancamento.metodoPagamento === 'cartao') {
+          return String(lancamento.faturaRef || '').startsWith(mesAtual)
+        }
 
-  return normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual)
-})
+        return normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual)
+      })
       .filter((lancamento) => {
         if (filtro === 'categoria') {
           return Number(lancamento.categoriaId) === Number(filtroCategoria?.id)
@@ -188,8 +242,23 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         if (filtro === 'todos') return true
         if (filtro === 'receita') return lancamento.tipo === 'receita'
         if (filtro === 'despesa') return lancamento.tipo === 'despesa'
-        if (filtro === 'pendente') return lancamento.status === 'pendente'
-        if (filtro === 'pago') return lancamento.status === 'pago'
+
+        if (filtro === 'pendente') {
+          if (lancamento.metodoPagamento === 'cartao') {
+            return Number(lancamento.faturaValorPago || 0) < Number(lancamento.valor || 0)
+          }
+
+          return lancamento.status === 'pendente'
+        }
+
+        if (filtro === 'pago') {
+          if (lancamento.metodoPagamento === 'cartao') {
+            return Boolean(lancamento.faturaFechada)
+          }
+
+          return lancamento.status === 'pago'
+        }
+
         if (filtro === 'pix') return lancamento.metodoPagamento === 'pix'
         if (filtro === 'dinheiro') return lancamento.metodoPagamento === 'dinheiro'
         if (filtro === 'cartao') return lancamento.metodoPagamento === 'cartao'
@@ -232,10 +301,68 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     }
   }, [lancamentosFiltrados])
 
-  const grupos = useMemo(() => {
+  const faturasCartao = useMemo(() => {
     const mapa = new Map()
 
-    for (const lancamento of lancamentosFiltrados) {
+    const itensCartao = lancamentosFiltrados.filter(
+      (lancamento) => lancamento.metodoPagamento === 'cartao'
+    )
+
+    for (const lancamento of itensCartao) {
+      const cartaoId = lancamento.cartaoId || 'sem-cartao'
+      const faturaRef = lancamento.faturaRef || mesAtual
+      const chave = `${cartaoId}-${faturaRef}`
+
+      if (!mapa.has(chave)) {
+        mapa.set(chave, {
+          id: chave,
+          cartaoId,
+          faturaRef,
+          cartao: lancamento.cartao,
+          itens: [],
+          total: 0,
+          valorPago: 0,
+          fechada: false,
+          vencida: false
+        })
+      }
+
+      const grupo = mapa.get(chave)
+      grupo.itens.push(lancamento)
+      grupo.total += Number(lancamento.valor || 0)
+    }
+
+    const lista = Array.from(mapa.values()).map((fatura) => {
+      const valoresPagos = fatura.itens.map((item) => Number(item.faturaValorPago || 0))
+      const valorPago = valoresPagos.length > 0 ? Math.max(...valoresPagos) : 0
+      const fechadaPorCampo = fatura.itens.some((item) => Boolean(item.faturaFechada))
+      const fechadaPorValor = valorPago >= fatura.total && fatura.total > 0
+      const fechada = fechadaPorCampo || fechadaPorValor
+
+      return {
+        ...fatura,
+        valorPago,
+        fechada,
+        vencida: faturaEstaVencida(fatura.cartao, fatura.faturaRef, fechada)
+      }
+    })
+
+    return lista.sort((a, b) => {
+      const nomeA = a.cartao?.nome || ''
+      const nomeB = b.cartao?.nome || ''
+
+      return nomeA.localeCompare(nomeB)
+    })
+  }, [lancamentosFiltrados, mesAtual])
+
+  const gruposNaoCartao = useMemo(() => {
+    const mapa = new Map()
+
+    const itensNaoCartao = lancamentosFiltrados.filter(
+      (lancamento) => lancamento.metodoPagamento !== 'cartao'
+    )
+
+    for (const lancamento of itensNaoCartao) {
       const data = normalizarDataCivil(lancamento.dataCompetencia) || 'Sem data'
 
       if (!mapa.has(data)) {
@@ -279,6 +406,75 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     setCategoriaEdicaoId('')
     setSubcategoriaEdicaoId('')
     setEscopoEdicao('este')
+  }
+
+  const abrirPagamentoFatura = (fatura) => {
+    if (fatura.fechada) {
+      const confirmar = confirm(`Reabrir a fatura ${formatarFaturaRef(fatura.faturaRef)} do cartão ${fatura.cartao?.nome || 'Cartão'}?`)
+
+      if (!confirmar) return
+
+      reabrirFatura(fatura)
+      return
+    }
+
+    const saldoPendente = Math.max(Number(fatura.total || 0) - Number(fatura.valorPago || 0), 0)
+
+    setModalPagamento(fatura)
+    setValorPagamentoFatura(formatarCampoMoeda(String(Math.round(saldoPendente * 100))))
+  }
+
+  const fecharModalPagamento = () => {
+    setModalPagamento(null)
+    setValorPagamentoFatura('')
+  }
+
+  const salvarPagamentoFatura = async () => {
+    if (!modalPagamento) return
+
+    const valorInformado = moedaParaNumero(valorPagamentoFatura)
+
+    if (!valorInformado || valorInformado <= 0) {
+      alert('Informe um valor válido para pagamento.')
+      return
+    }
+
+    const valorPagoAnterior = Number(modalPagamento.valorPago || 0)
+    const novoValorPago = Math.min(valorPagoAnterior + valorInformado, Number(modalPagamento.total || 0))
+    const faturaFechada = novoValorPago >= Number(modalPagamento.total || 0)
+    const agora = agoraISO()
+    const dataPagamento = new Date().toISOString().slice(0, 10)
+
+    for (const item of modalPagamento.itens) {
+      await db.lancamentos.update(item.id, {
+        faturaValorPago: novoValorPago,
+        faturaFechada,
+        status: faturaFechada ? 'pago' : 'pendente',
+        dataPagamento: faturaFechada ? dataPagamento : null,
+        updatedAt: agora,
+        syncStatus: 'pending'
+      })
+    }
+
+    agendarSync()
+    fecharModalPagamento()
+  }
+
+  const reabrirFatura = async (fatura) => {
+    const agora = agoraISO()
+
+    for (const item of fatura.itens) {
+      await db.lancamentos.update(item.id, {
+        faturaValorPago: 0,
+        faturaFechada: false,
+        status: 'pendente',
+        dataPagamento: null,
+        updatedAt: agora,
+        syncStatus: 'pending'
+      })
+    }
+
+    agendarSync()
   }
 
   const obterRelacionados = (lancamento, escopo) => {
@@ -424,7 +620,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
             Extratos
           </h1>
           <p className="mt-0.5 text-sm text-[#91A99C]">
-            Histórico organizado por dia
+            Histórico organizado por fatura e data
           </p>
         </div>
       </div>
@@ -546,7 +742,40 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
       </CardPremium>
 
       <section className="space-y-3">
-        {grupos.map(([data, itens]) => (
+        {faturasCartao.length > 0 && (
+          <div className="space-y-1.5">
+            <div className="flex items-end justify-between px-2">
+              <p className="text-xl font-black leading-6 tracking-tight text-[#F4FFF8]">
+                Faturas
+              </p>
+
+              <p className="text-sm font-semibold text-[#3AF2A1]">
+                {faturasCartao.length} {faturasCartao.length === 1 ? 'fatura' : 'faturas'}
+              </p>
+            </div>
+
+            <div className="space-y-3">
+              {faturasCartao.map((fatura) => (
+                <CardFatura
+                  key={fatura.id}
+                  fatura={fatura}
+                  expandida={faturaExpandidaId === fatura.id}
+                  onAlternarPagamento={() => abrirPagamentoFatura(fatura)}
+                  onAlternarExpansao={() =>
+                    setFaturaExpandidaId((atual) => (atual === fatura.id ? null : fatura.id))
+                  }
+                  onEditarDescricao={abrirEditorDescricao}
+                  onEditarValor={abrirEditorValor}
+                  onEditarCategoria={abrirEditorCategoria}
+                  expandidoId={expandidoId}
+                  setExpandidoId={setExpandidoId}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
+        {gruposNaoCartao.map(([data, itens]) => (
           <div key={data} className="space-y-1.5">
             <div className="flex items-end justify-between px-2">
               <p className="text-xl font-black leading-6 tracking-tight text-[#F4FFF8]">
@@ -569,7 +798,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           </div>
         ))}
 
-        {grupos.length === 0 && (
+        {faturasCartao.length === 0 && gruposNaoCartao.length === 0 && (
           <CardPremium>
             <p className="text-sm font-semibold text-[#91A99C]">
               Nenhum lançamento encontrado para os filtros selecionados.
@@ -599,6 +828,16 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           possuiRelacionados={possuiRelacionados}
           onSalvar={salvarEdicao}
           onFechar={fecharEditor}
+        />
+      )}
+
+      {modalPagamento && (
+        <ModalPagamentoFatura
+          fatura={modalPagamento}
+          valorPagamentoFatura={valorPagamentoFatura}
+          setValorPagamentoFatura={setValorPagamentoFatura}
+          onSalvar={salvarPagamentoFatura}
+          onFechar={fecharModalPagamento}
         />
       )}
     </div>
@@ -631,6 +870,102 @@ function ResumoTopo({ titulo, valor, positivo = false, semBorda = false }) {
         {formatarMoeda(valor)}
       </p>
     </div>
+  )
+}
+
+function CardFatura({
+  fatura,
+  expandida,
+  onAlternarPagamento,
+  onAlternarExpansao,
+  onEditarDescricao,
+  onEditarValor,
+  onEditarCategoria,
+  expandidoId,
+  setExpandidoId
+}) {
+  const corStatus = fatura.vencida
+    ? 'text-red-300 border-red-900/60 bg-red-950/30'
+    : fatura.fechada
+      ? 'text-[#3AF2A1] border-[#3AF2A1]/40 bg-[#3AF2A1]/10'
+      : 'text-yellow-300 border-yellow-700/40 bg-yellow-950/20'
+
+  const textoStatus = fatura.fechada
+    ? 'Fechada'
+    : fatura.valorPago > 0
+      ? 'Parcial'
+      : fatura.vencida
+        ? 'Vencida'
+        : 'Aberta'
+
+  return (
+    <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
+      <div className="grid min-h-[56px] w-full grid-cols-[44px_minmax(0,1fr)_auto_32px] items-center gap-2 px-3 py-2">
+        <button
+          onClick={onAlternarPagamento}
+          className={`flex h-9 w-9 items-center justify-center rounded-2xl border transition active:scale-95 ${corStatus}`}
+          title={textoStatus}
+        >
+          {fatura.fechada ? <CheckCircle2 size={18} /> : fatura.vencida ? <XCircle size={18} /> : <CreditCard size={18} />}
+        </button>
+
+        <div className="min-w-0">
+          <p className="truncate text-[13px] font-black leading-[15px] text-[#F4FFF8]">
+            {fatura.cartao?.nome || 'Cartão'}
+          </p>
+
+          <p className="mt-[1px] truncate text-[10.5px] font-semibold leading-[12px] text-[#91A99C]">
+            {formatarFaturaRef(fatura.faturaRef)} • {textoStatus}
+            {fatura.valorPago > 0 && !fatura.fechada ? ` • Pago ${formatarMoeda(fatura.valorPago)}` : ''}
+          </p>
+        </div>
+
+        <div className="shrink-0 text-right">
+          <p className="whitespace-nowrap text-[12.5px] font-black leading-[14px] text-red-300">
+            {formatarMoeda(fatura.total)}
+          </p>
+
+          <p className="mt-[1px] text-[10px] font-semibold leading-[11px] text-[#B5CFC1]">
+            {fatura.itens.length} {fatura.itens.length === 1 ? 'item' : 'itens'}
+          </p>
+        </div>
+
+        <button
+          onClick={onAlternarExpansao}
+          className="flex h-8 w-8 items-center justify-center rounded-xl text-[#B5CFC1] active:scale-95"
+        >
+          <ChevronDown
+            size={15}
+            className={`transition ${expandida ? 'rotate-180' : ''}`}
+          />
+        </button>
+      </div>
+
+      <div
+        className={`grid transition-all duration-300 ease-out ${
+          expandida ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        }`}
+      >
+        <div className="overflow-hidden">
+          <div className="space-y-2 border-t border-[#1C3D2E]/70 p-2">
+            {fatura.itens.map((lancamento) => (
+              <CardExtrato
+                key={lancamento.id}
+                lancamento={lancamento}
+                expandido={expandidoId === lancamento.id}
+                controlePorFatura
+                onToggle={() =>
+                  setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
+                }
+                onEditarDescricao={onEditarDescricao}
+                onEditarValor={onEditarValor}
+                onEditarCategoria={onEditarCategoria}
+              />
+            ))}
+          </div>
+        </div>
+      </div>
+    </CardPremium>
   )
 }
 
@@ -667,7 +1002,8 @@ function CardExtrato({
   onToggle,
   onEditarDescricao,
   onEditarValor,
-  onEditarCategoria
+  onEditarCategoria,
+  controlePorFatura = false
 }) {
   const positivo = lancamento.tipo === 'receita'
 
@@ -760,7 +1096,7 @@ function CardExtrato({
             lancamento.status === 'pendente' ? 'text-yellow-400' : 'text-[#B5CFC1]'
           }`}
           >
-            {lancamento.status}
+            {controlePorFatura ? 'na fatura' : lancamento.status}
           </p>
         </button>
 
@@ -783,27 +1119,97 @@ function CardExtrato({
               </p>
             )}
 
-            <div className="grid grid-cols-2 gap-2 translate-y-1">
-              <button
-                onClick={alternarStatus}
-                className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
-              >
-                {lancamento.status === 'pago' ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
-                {lancamento.status === 'pago' ? 'Pendente' : 'Pago'}
-              </button>
-
+            {controlePorFatura ? (
               <button
                 onClick={excluir}
-                className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
+                className="flex min-h-[32px] w-full items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
               >
                 <Trash2 size={13} />
-                Excluir
+                Excluir lançamento
               </button>
-            </div>
+            ) : (
+              <div className="grid grid-cols-2 gap-2 translate-y-1">
+                <button
+                  onClick={alternarStatus}
+                  className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-[#1C3D2E] bg-black/35 text-[11px] font-black text-[#3AF2A1] active:scale-[0.98]"
+                >
+                  {lancamento.status === 'pago' ? <XCircle size={13} /> : <CheckCircle2 size={13} />}
+                  {lancamento.status === 'pago' ? 'Pendente' : 'Pago'}
+                </button>
+
+                <button
+                  onClick={excluir}
+                  className="flex min-h-[32px] items-center justify-center gap-1.5 rounded-2xl border border-red-900/60 bg-red-950/30 text-[11px] font-black text-red-300 active:scale-[0.98]"
+                >
+                  <Trash2 size={13} />
+                  Excluir
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>
     </CardPremium>
+  )
+}
+
+function ModalPagamentoFatura({
+  fatura,
+  valorPagamentoFatura,
+  setValorPagamentoFatura,
+  onSalvar,
+  onFechar
+}) {
+  const saldoPendente = Math.max(Number(fatura.total || 0) - Number(fatura.valorPago || 0), 0)
+
+  return (
+    <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C3D2E] bg-[#03130C] p-4 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3AF2A1]">
+              Pagamento de fatura
+            </p>
+            <h2 className="mt-1 text-xl font-black text-[#F4FFF8]">
+              {fatura.cartao?.nome || 'Cartão'}
+            </h2>
+            <p className="mt-1 text-xs text-[#91A99C]">
+              {formatarFaturaRef(fatura.faturaRef)} • Pendente {formatarMoeda(saldoPendente)}
+            </p>
+          </div>
+
+          <button
+            onClick={onFechar}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl border border-[#1C3D2E] bg-black/40 text-[#91A99C]"
+          >
+            <X size={18} />
+          </button>
+        </div>
+
+        <div className="space-y-3">
+          <div className="grid grid-cols-3 overflow-hidden rounded-2xl border border-[#1C3D2E] bg-black/40">
+            <ResumoTopo titulo="Total" valor={fatura.total} />
+            <ResumoTopo titulo="Pago" valor={fatura.valorPago} positivo />
+            <ResumoTopo titulo="Restante" valor={saldoPendente} semBorda />
+          </div>
+
+          <input
+            autoFocus
+            value={valorPagamentoFatura}
+            inputMode="numeric"
+            onChange={(event) => setValorPagamentoFatura(formatarCampoMoeda(event.target.value))}
+            className="min-h-[52px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-center text-xl font-black text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+          />
+
+          <button
+            onClick={onSalvar}
+            className="min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] text-sm font-black text-white shadow-[0_0_24px_rgba(58,242,161,0.22)] active:scale-[0.98]"
+          >
+            Confirmar pagamento
+          </button>
+        </div>
+      </div>
+    </div>
   )
 }
 
