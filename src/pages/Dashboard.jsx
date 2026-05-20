@@ -44,9 +44,15 @@ const normalizarTexto = (texto) => {
     .trim()
 }
 
+const categoriaEhReembolso = (categoria) => {
+  const nome = normalizarTexto(categoria?.nome)
+
+  return nome === 'reembolso' || nome === 'reembolsos'
+}
+
 export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const [menuAberto, setMenuAberto] = useState(false)
-  const [modoCategorias, setModoCategorias] = useState('lista')
+  const [modoCategorias, setModoCategorias] = useState('grafico')
   const mesAtual = obterMesAtual()
 
   const lancamentos = useLiveQuery(async () => {
@@ -69,7 +75,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
           (item) => Number(item.id) === Number(lancamento.categoriaId)
         )
 
-        return normalizarTexto(categoria?.nome) !== 'reembolsos'
+        return !categoriaEhReembolso(categoria)
       })
   }, [lancamentos, categorias, mesAtual])
 
@@ -96,7 +102,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         )
 
         if (!categoria) return
-        if (normalizarTexto(categoria.nome) === 'reembolsos') return
+        if (categoriaEhReembolso(categoria)) return
 
         const chave = Number(categoria.id)
         const atual = mapa.get(chave) || {
