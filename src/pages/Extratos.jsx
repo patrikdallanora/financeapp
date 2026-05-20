@@ -173,7 +173,13 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     const termo = normalizarTexto(busca)
 
     return dadosEnriquecidos
-      .filter((lancamento) => normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual))
+      .filter((lancamento) => {
+  if (lancamento.metodoPagamento === 'cartao') {
+    return String(lancamento.faturaRef || '').startsWith(mesAtual)
+  }
+
+  return normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual)
+})
       .filter((lancamento) => {
         if (filtro === 'categoria') {
           return Number(lancamento.categoriaId) === Number(filtroCategoria?.id)
