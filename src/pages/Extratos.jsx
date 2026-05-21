@@ -51,6 +51,12 @@ const normalizarTexto = (texto) => {
     .trim()
 }
 
+const categoriaEhReembolso = (categoria) => {
+  const nome = normalizarTexto(categoria?.nome)
+
+  return nome === 'reembolso' || nome === 'reembolsos'
+}
+
 const obterFiltroInicial = (filtroInicial) => {
   if (typeof filtroInicial === 'object' && filtroInicial?.filtro) {
     return filtroInicial.filtro
@@ -233,6 +239,9 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         }
 
         return normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual)
+      })
+      .filter((lancamento) => {
+        return !categoriaEhReembolso(lancamento.categoria)
       })
       .filter((lancamento) => {
         if (filtro === 'categoria') {
