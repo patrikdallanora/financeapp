@@ -221,14 +221,24 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
           titulo="Receitas"
           valor={totalReceitas}
           tipo="positivo"
-          onClick={() => onAbrirExtratos('receita')}
+          onClick={() =>
+  onAbrirExtratos({
+    filtro: 'receita',
+    mesReferencia
+  })
+}
         />
 
         <CardResumo
           titulo="Despesas"
           valor={totalDespesas}
           tipo="negativo"
-          onClick={() => onAbrirExtratos('despesa')}
+          onClick={() =>
+  onAbrirExtratos({
+    filtro: 'despesa',
+    mesReferencia
+  })
+}
         />
 
         <CardResumo

@@ -197,7 +197,7 @@ const OPCOES_FILTRO = [
 export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const filtrosIniciais = useMemo(() => obterFiltrosDetalhadosIniciais(filtroInicial), [filtroInicial])
 
-  const [mesAtual, setMesAtual] = useState(new Date().toISOString().slice(0, 7))
+  const [mesAtual, setMesAtual] = useState(obterMesInicial(filtroInicial))
   const [filtro, setFiltro] = useState(obterFiltroInicial(filtroInicial))
   const [filtroCategoria, setFiltroCategoria] = useState(obterCategoriaInicial(filtroInicial))
   const [filtroTipo, setFiltroTipo] = useState(filtrosIniciais.tipo)
@@ -226,6 +226,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   useEffect(() => {
     const novosFiltros = obterFiltrosDetalhadosIniciais(filtroInicial)
 
+    setMesAtual(obterMesInicial(filtroInicial))
     setFiltro(obterFiltroInicial(filtroInicial))
     setFiltroCategoria(obterCategoriaInicial(filtroInicial))
     setFiltroTipo(novosFiltros.tipo)
@@ -1571,6 +1572,14 @@ function EditorRapido({
       </div>
     </div>
   )
+}
+
+const obterMesInicial = (filtroInicial) => {
+  if (typeof filtroInicial === 'object' && filtroInicial?.mesReferencia) {
+    return filtroInicial.mesReferencia
+  }
+
+  return new Date().toISOString().slice(0, 7)
 }
 
 function TituloFiltro({ children }) {
