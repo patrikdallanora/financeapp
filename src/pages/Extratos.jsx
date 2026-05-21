@@ -76,6 +76,40 @@ const obterCategoriaInicial = (filtroInicial) => {
   return null
 }
 
+const obterFiltrosDetalhadosIniciais = (filtroInicial) => {
+  const filtros = {
+    tipo: 'todos',
+    pagamento: 'todos',
+    status: 'todos',
+    categoriaId: 'todos',
+    subcategoriaId: 'todos',
+    usuarioId: 'todos',
+    cartaoId: 'todos'
+  }
+
+  if (typeof filtroInicial === 'object' && filtroInicial?.filtro === 'categoria') {
+    filtros.categoriaId = filtroInicial.categoriaId ? String(filtroInicial.categoriaId) : 'todos'
+    return filtros
+  }
+
+  if (filtroInicial === 'receita' || filtroInicial === 'despesa') {
+    filtros.tipo = filtroInicial
+    return filtros
+  }
+
+  if (filtroInicial === 'pix' || filtroInicial === 'dinheiro' || filtroInicial === 'cartao') {
+    filtros.pagamento = filtroInicial
+    return filtros
+  }
+
+  if (filtroInicial === 'pago' || filtroInicial === 'pendente') {
+    filtros.status = filtroInicial
+    return filtros
+  }
+
+  return filtros
+}
+
 const formatarMes = (mesRef) => {
   const [ano, mes] = mesRef.split('-').map(Number)
   const data = new Date(ano, mes - 1, 1)
@@ -161,9 +195,18 @@ const OPCOES_FILTRO = [
 ]
 
 export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
+  const filtrosIniciais = useMemo(() => obterFiltrosDetalhadosIniciais(filtroInicial), [filtroInicial])
+
   const [mesAtual, setMesAtual] = useState(new Date().toISOString().slice(0, 7))
   const [filtro, setFiltro] = useState(obterFiltroInicial(filtroInicial))
   const [filtroCategoria, setFiltroCategoria] = useState(obterCategoriaInicial(filtroInicial))
+  const [filtroTipo, setFiltroTipo] = useState(filtrosIniciais.tipo)
+  const [filtroPagamento, setFiltroPagamento] = useState(filtrosIniciais.pagamento)
+  const [filtroStatus, setFiltroStatus] = useState(filtrosIniciais.status)
+  const [filtroCategoriaId, setFiltroCategoriaId] = useState(filtrosIniciais.categoriaId)
+  const [filtroSubcategoriaId, setFiltroSubcategoriaId] = useState(filtrosIniciais.subcategoriaId)
+  const [filtroUsuarioId, setFiltroUsuarioId] = useState(filtrosIniciais.usuarioId)
+  const [filtroCartaoId, setFiltroCartaoId] = useState(filtrosIniciais.cartaoId)
   const [busca, setBusca] = useState('')
   const [buscaAberta, setBuscaAberta] = useState(false)
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
@@ -181,8 +224,17 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [valorPagamentoFatura, setValorPagamentoFatura] = useState('')
 
   useEffect(() => {
+    const novosFiltros = obterFiltrosDetalhadosIniciais(filtroInicial)
+
     setFiltro(obterFiltroInicial(filtroInicial))
     setFiltroCategoria(obterCategoriaInicial(filtroInicial))
+    setFiltroTipo(novosFiltros.tipo)
+    setFiltroPagamento(novosFiltros.pagamento)
+    setFiltroStatus(novosFiltros.status)
+    setFiltroCategoriaId(novosFiltros.categoriaId)
+    setFiltroSubcategoriaId(novosFiltros.subcategoriaId)
+    setFiltroUsuarioId(novosFiltros.usuarioId)
+    setFiltroCartaoId(novosFiltros.cartaoId)
     setBusca('')
     setBuscaAberta(false)
     setFiltrosAbertos(false)
@@ -210,6 +262,27 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     return todos.filter((cartao) => !cartao.deletedAt)
   }, [])
 
+  const filtrosAtivos = useMemo(() => {
+    return (
+      filtroTipo !== 'todos' ||
+      filtroPagamento !== 'todos' ||
+      filtroStatus !== 'todos' ||
+      filtroCategoriaId !== 'todos' ||
+      filtroSubcategoriaId !== 'todos' ||
+      filtroUsuarioId !== 'todos' ||
+      filtroCartaoId !== 'todos'
+    )
+  }, [
+    filtroTipo,
+    filtroPagamento,
+    filtroStatus,
+    filtroCategoriaId,
+    filtroSubcategoriaId,
+    filtroUsuarioId,
+    filtroCartaoId
+  ])
+
+
   const dadosEnriquecidos = useMemo(() => {
     if (!lancamentos || !categorias || !subcategorias || !cartoes) return []
 
@@ -229,6 +302,14 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     })
   }, [lancamentos, categorias, subcategorias, cartoes])
 
+  const subcategoriasFiltradas = useMemo(() => {
+    if (!subcategorias || filtroCategoriaId === 'todos') return []
+
+    return subcategorias.filter(
+      (subcategoria) => Number(subcategoria.categoriaId) === Number(filtroCategoriaId)
+    )
+  }, [subcategorias, filtroCategoriaId])
+
   const lancamentosFiltrados = useMemo(() => {
     const termo = normalizarTexto(busca)
 
@@ -244,23 +325,17 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         return !categoriaEhReembolso(lancamento.categoria)
       })
       .filter((lancamento) => {
-        if (filtro === 'categoria') {
-          return Number(lancamento.categoriaId) === Number(filtroCategoria?.id)
-        }
+        if (filtroTipo === 'todos') return true
+        return lancamento.tipo === filtroTipo
+      })
+      .filter((lancamento) => {
+        if (filtroPagamento === 'todos') return true
+        return lancamento.metodoPagamento === filtroPagamento
+      })
+      .filter((lancamento) => {
+        if (filtroStatus === 'todos') return true
 
-        if (filtro === 'todos') return true
-        if (filtro === 'receita') return lancamento.tipo === 'receita'
-        if (filtro === 'despesa') return lancamento.tipo === 'despesa'
-
-        if (filtro === 'pendente') {
-          if (lancamento.metodoPagamento === 'cartao') {
-            return Number(lancamento.faturaValorPago || 0) < Number(lancamento.valor || 0)
-          }
-
-          return lancamento.status === 'pendente'
-        }
-
-        if (filtro === 'pago') {
+        if (filtroStatus === 'pago') {
           if (lancamento.metodoPagamento === 'cartao') {
             return Boolean(lancamento.faturaFechada)
           }
@@ -268,10 +343,31 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           return lancamento.status === 'pago'
         }
 
-        if (filtro === 'pix') return lancamento.metodoPagamento === 'pix'
-        if (filtro === 'dinheiro') return lancamento.metodoPagamento === 'dinheiro'
-        if (filtro === 'cartao') return lancamento.metodoPagamento === 'cartao'
+        if (filtroStatus === 'pendente') {
+          if (lancamento.metodoPagamento === 'cartao') {
+            return !lancamento.faturaFechada
+          }
+
+          return lancamento.status === 'pendente'
+        }
+
         return true
+      })
+      .filter((lancamento) => {
+        if (filtroCategoriaId === 'todos') return true
+        return Number(lancamento.categoriaId) === Number(filtroCategoriaId)
+      })
+      .filter((lancamento) => {
+        if (filtroSubcategoriaId === 'todos') return true
+        return Number(lancamento.subcategoriaId) === Number(filtroSubcategoriaId)
+      })
+      .filter((lancamento) => {
+        if (filtroUsuarioId === 'todos') return true
+        return Number(lancamento.usuarioId) === Number(filtroUsuarioId)
+      })
+      .filter((lancamento) => {
+        if (filtroCartaoId === 'todos') return true
+        return Number(lancamento.cartaoId) === Number(filtroCartaoId)
       })
       .filter((lancamento) => {
         if (!termo) return true
@@ -292,7 +388,18 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
 
         return dataB.localeCompare(dataA)
       })
-  }, [dadosEnriquecidos, mesAtual, filtro, filtroCategoria, busca])
+  }, [
+    dadosEnriquecidos,
+    mesAtual,
+    filtroTipo,
+    filtroPagamento,
+    filtroStatus,
+    filtroCategoriaId,
+    filtroSubcategoriaId,
+    filtroUsuarioId,
+    filtroCartaoId,
+    busca
+  ])
 
   const resumo = useMemo(() => {
     const receitas = lancamentosFiltrados
@@ -387,6 +494,20 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const limparFiltroCategoria = () => {
     setFiltro('todos')
     setFiltroCategoria(null)
+    setFiltroCategoriaId('todos')
+    setFiltroSubcategoriaId('todos')
+  }
+
+  const limparFiltrosDetalhados = () => {
+    setFiltro('todos')
+    setFiltroCategoria(null)
+    setFiltroTipo('todos')
+    setFiltroPagamento('todos')
+    setFiltroStatus('todos')
+    setFiltroCategoriaId('todos')
+    setFiltroSubcategoriaId('todos')
+    setFiltroUsuarioId('todos')
+    setFiltroCartaoId('todos')
   }
 
   const abrirEditorDescricao = (lancamento) => {
@@ -660,7 +781,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           </BotaoIcone>
 
           <BotaoIcone
-            ativo={filtro !== 'todos'}
+            ativo={filtrosAtivos}
             onClick={() => {
               setFiltrosAbertos((atual) => !atual)
               setBuscaAberta(false)
@@ -675,25 +796,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
           </BotaoIcone>
         </div>
 
-        {filtro === 'categoria' && filtroCategoria?.nome && (
-          <div className="flex items-center justify-between gap-3 rounded-2xl border border-[#1C3D2E] bg-black/35 px-3 py-2">
-            <div className="min-w-0">
-              <p className="text-[10px] font-black uppercase tracking-[0.18em] text-[#3AF2A1]">
-                Categoria filtrada
-              </p>
-              <p className="truncate text-xs font-black text-[#F4FFF8]">
-                {filtroCategoria.nome}
-              </p>
-            </div>
 
-            <button
-              onClick={limparFiltroCategoria}
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-[#1C3D2E] bg-[#030504] text-[#91A99C] active:scale-95"
-            >
-              <X size={15} />
-            </button>
-          </div>
-        )}
 
         {buscaAberta && (
           <div className="relative">
@@ -713,33 +816,119 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         )}
 
         {filtrosAbertos && (
-          <div className="rounded-3xl border border-[#1C3D2E] bg-black/45 p-2">
-            <div className="grid grid-cols-2 gap-2">
-              {OPCOES_FILTRO.map((opcao) => {
-                const ativo = filtro === opcao.valor
+          <div className="space-y-3 rounded-3xl border border-[#1C3D2E] bg-black/45 p-3">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <FiltroSelect
+                titulo="Tipo"
+                value={filtroTipo}
+                onChange={setFiltroTipo}
+                opcoes={[
+                  ['todos', 'Todas'],
+                  ['despesa', 'Despesas'],
+                  ['receita', 'Receitas']
+                ]}
+              />
 
-                return (
-                  <button
-                    key={opcao.valor}
-                    onClick={() => {
-                      setFiltro(opcao.valor)
-                      setFiltroCategoria(null)
-                      setFiltrosAbertos(false)
-                    }}
-                    className={`
-                      min-h-[38px] rounded-2xl border px-3 text-left text-xs font-black transition active:scale-[0.98]
-                      ${
-                        ativo
-                          ? 'border-[#3AF2A1]/50 bg-[#3AF2A1]/10 text-[#3AF2A1]'
-                          : 'border-[#1C3D2E] bg-[#030504] text-[#91A99C]'
-                      }
-                    `}
-                  >
-                    {opcao.label}
-                  </button>
-                )
-              })}
+              <FiltroSelect
+                titulo="Pagamento"
+                value={filtroPagamento}
+                onChange={setFiltroPagamento}
+                opcoes={[
+                  ['todos', 'Todos'],
+                  ['cartao', 'Cartão'],
+                  ['pix', 'PIX'],
+                  ['dinheiro', 'Dinheiro']
+                ]}
+              />
+
+              <FiltroSelect
+                titulo="Status"
+                value={filtroStatus}
+                onChange={setFiltroStatus}
+                opcoes={[
+                  ['todos', 'Todos'],
+                  ['pago', 'Pago'],
+                  ['pendente', 'Pendente']
+                ]}
+              />
+
+              <div>
+                <TituloFiltro>Categoria</TituloFiltro>
+
+                <select
+                  value={filtroCategoriaId}
+                  onChange={(event) => {
+                    setFiltro('todos')
+                    setFiltroCategoria(null)
+                    setFiltroCategoriaId(event.target.value)
+                    setFiltroSubcategoriaId('todos')
+                  }}
+                  className="min-h-[42px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+                >
+                  <option value="todos">Todas</option>
+                  {categorias.map((categoria) => (
+                    <option key={categoria.id} value={categoria.id}>
+                      {categoria.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div>
+                <TituloFiltro>Subcategoria</TituloFiltro>
+
+                <select
+                  disabled={filtroCategoriaId === 'todos'}
+                  value={filtroSubcategoriaId}
+                  onChange={(event) => setFiltroSubcategoriaId(event.target.value)}
+                  className="min-h-[42px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-3 text-sm font-semibold text-[#F4FFF8] outline-none disabled:opacity-50"
+                >
+                  <option value="todos">Todas</option>
+                  {subcategoriasFiltradas.map((subcategoria) => (
+                    <option key={subcategoria.id} value={subcategoria.id}>
+                      {subcategoria.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <FiltroSelect
+                titulo="Quem lançou"
+                value={filtroUsuarioId}
+                onChange={setFiltroUsuarioId}
+                opcoes={[
+                  ['todos', 'Todos'],
+                  ['1', 'PK'],
+                  ['2', 'Grazi']
+                ]}
+              />
+
+              <div>
+                <TituloFiltro>Cartão</TituloFiltro>
+
+                <select
+                  value={filtroCartaoId}
+                  onChange={(event) => setFiltroCartaoId(event.target.value)}
+                  className="min-h-[42px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+                >
+                  <option value="todos">Todos</option>
+                  {cartoes.map((cartao) => (
+                    <option key={cartao.id} value={cartao.id}>
+                      {cartao.nome}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
+
+            {filtrosAtivos && (
+              <button
+                onClick={limparFiltrosDetalhados}
+                className="min-h-[38px] w-full rounded-2xl border border-[#1C3D2E] bg-black/35 px-3 text-xs font-black text-[#91A99C] transition active:scale-[0.98]"
+              >
+                Limpar filtros
+              </button>
+            )}
           </div>
         )}
 
@@ -1369,6 +1558,34 @@ function EditorRapido({
           </button>
         </div>
       </div>
+    </div>
+  )
+}
+
+function TituloFiltro({ children }) {
+  return (
+    <p className="mb-1.5 px-1 text-[10px] font-black uppercase tracking-[0.18em] text-[#3AF2A1]">
+      {children}
+    </p>
+  )
+}
+
+function FiltroSelect({ titulo, value, onChange, opcoes }) {
+  return (
+    <div>
+      <TituloFiltro>{titulo}</TituloFiltro>
+
+      <select
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        className="min-h-[42px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+      >
+        {opcoes.map(([valor, label]) => (
+          <option key={valor} value={valor}>
+            {label}
+          </option>
+        ))}
+      </select>
     </div>
   )
 }
