@@ -322,7 +322,18 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         return normalizarDataCivil(lancamento.dataCompetencia).startsWith(mesAtual)
       })
       .filter((lancamento) => {
-        return !categoriaEhReembolso(lancamento.categoria)
+        if (!categoriaEhReembolso(lancamento.categoria)) return true
+
+        const reembolsoSelecionadoNoDropdown =
+          filtroCategoriaId !== 'todos' &&
+          Number(lancamento.categoriaId) === Number(filtroCategoriaId)
+
+        const reembolsoSelecionadoViaFiltroInicial =
+          filtro === 'categoria' &&
+          filtroCategoria?.id &&
+          Number(lancamento.categoriaId) === Number(filtroCategoria.id)
+
+        return reembolsoSelecionadoNoDropdown || reembolsoSelecionadoViaFiltroInicial
       })
       .filter((lancamento) => {
         if (filtroTipo === 'todos') return true
