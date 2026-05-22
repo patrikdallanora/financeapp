@@ -196,7 +196,8 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     onAbrirExtratos({
       filtro: 'categoria',
       categoriaId: categoria.id,
-      categoriaNome: categoria.nome
+      categoriaNome: categoria.nome,
+      mesReferencia
     })
   }
 
