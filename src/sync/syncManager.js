@@ -754,7 +754,7 @@ export const restaurarBaseLocalDoSheets = async () => {
 
       for (const registro of registros) {
         const local = prepararRegistroRestauracaoParaLocal(registro)
-        await db[tabela].add(local)
+        await db[tabela].put(local)
       }
 
       const maiorUpdatedAt = registros.reduce((maior, item) => {
