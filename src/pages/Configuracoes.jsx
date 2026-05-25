@@ -3,7 +3,7 @@ import { Wifi, WifiOff, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-re
 
 import { CardPremium } from '../components/CardPremium'
 import { TopoTela } from '../components/TopoTela'
-import { obterStatusSync } from '../sync/syncManager'
+import { obterStatusSync, restaurarBaseLocalDoSheets } from '../sync/syncManager'
 
 const formatarDataHora = (dataISO) => {
   if (!dataISO) return 'Ainda não sincronizado'
@@ -18,6 +18,7 @@ const formatarDataHora = (dataISO) => {
 
 export default function Configuracoes() {
   const [statusSync, setStatusSync] = useState(obterStatusSync())
+  const [restaurando, setRestaurando] = useState(false)
 
   useEffect(() => {
     const atualizar = () => {
@@ -30,7 +31,29 @@ export default function Configuracoes() {
 
     const intervalo = setInterval(atualizar, 5000)
 
-    return () => {
+  
+  const restaurarDados = async () => {
+    const confirmado = window.confirm(
+      'Isso irá apagar os dados locais deste aparelho e baixar novamente tudo do Google Sheets. Deseja continuar?'
+    )
+
+    if (!confirmado) return
+
+    try {
+      setRestaurando(true)
+
+      await restaurarBaseLocalDoSheets()
+
+      window.location.reload()
+    } catch (err) {
+      alert(`Erro ao restaurar dados: ${err.message}`)
+    } finally {
+      setRestaurando(false)
+    }
+  }
+
+
+  return () => {
       window.removeEventListener('financeapp-sync-status', atualizar)
       window.removeEventListener('online', atualizar)
       window.removeEventListener('offline', atualizar)
@@ -113,6 +136,33 @@ export default function Configuracoes() {
           {import.meta.env.VITE_SHEETS_API_URL || 'URL não configurada'}
         </p>
       </CardPremium>
+
+      <CardPremium className="rounded-[28px] border border-[#4A1D1D] bg-[#190606] p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
+              Recuperação
+            </p>
+
+            <h3 className="mt-1 text-base font-black text-[#F4FFF8]">
+              Restaurar dados deste aparelho
+            </h3>
+
+            <p className="mt-2 text-sm leading-5 text-[#C7D2CC]">
+              Apaga os dados locais deste dispositivo e baixa novamente tudo que está salvo no Google Sheets.
+            </p>
+          </div>
+
+          <button
+            onClick={restaurarDados}
+            disabled={restaurando}
+            className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-200 transition active:scale-[0.98] disabled:opacity-50"
+          >
+            {restaurando ? 'Restaurando...' : 'Restaurar'}
+          </button>
+        </div>
+      </CardPremium>
+
     </div>
   )
 }
@@ -134,6 +184,33 @@ function LinhaStatus({ icone: Icone, titulo, valor, destaque }) {
       <p className={`text-right text-xs font-black ${cores[destaque] || cores.neutro}`}>
         {valor}
       </p>
+
+      <CardPremium className="rounded-[28px] border border-[#4A1D1D] bg-[#190606] p-4">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <p className="text-xs font-black uppercase tracking-[0.18em] text-red-300">
+              Recuperação
+            </p>
+
+            <h3 className="mt-1 text-base font-black text-[#F4FFF8]">
+              Restaurar dados deste aparelho
+            </h3>
+
+            <p className="mt-2 text-sm leading-5 text-[#C7D2CC]">
+              Apaga os dados locais deste dispositivo e baixa novamente tudo que está salvo no Google Sheets.
+            </p>
+          </div>
+
+          <button
+            onClick={restaurarDados}
+            disabled={restaurando}
+            className="rounded-2xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-sm font-black text-red-200 transition active:scale-[0.98] disabled:opacity-50"
+          >
+            {restaurando ? 'Restaurando...' : 'Restaurar'}
+          </button>
+        </div>
+      </CardPremium>
+
     </div>
   )
 }

@@ -693,9 +693,107 @@ export const agendarSync = () => {
   clearTimeout(debounceTimer)
 
   debounceTimer = setTimeout(() => {
-    executarSync()
+    executarPullInicial()
   }, DEBOUNCE_SYNC)
 }
+
+
+export const restaurarBaseLocalDoSheets = async () => {
+  const config = verificarConfiguracaoSync()
+
+  if (!config.ok) {
+    throw new Error(config.erro)
+  }
+
+  atualizarEstadoGlobalSync({
+    sincronizando: true,
+    ultimoErro: null
+  })
+
+  try {
+    // limpa tabelas locais
+    for (const tabela of TABELAS) {
+      await db[tabela].clear()
+    }
+
+    await db.syncLog.clear()
+
+    // limpa metas locais
+    localStorage.removeItem(CHAVE_META_LOCAL)
+    localStorage.removeItem(CHAVE_ULTIMO_PULL_INICIAL)
+
+    TABELAS.forEach((tabela) => {
+      localStorage.removeItem(obterChaveUltimoPull(tabela))
+    })
+
+    // baixa tudo do sheets
+    const url = new URL(API_URL)
+
+    url.searchParams.set('modo', 'pullBatch')
+    url.searchParams.set('secret', API_SECRET || '')
+    url.searchParams.set('tabelas', TABELAS.join(','))
+
+    const resposta = await fetch(url.toString(), {
+      method: 'GET'
+    })
+
+    const dados = await lerRespostaJson(resposta)
+
+    if (!resposta.ok || dados.erro) {
+      throw new Error(dados.erro || `Erro HTTP ${resposta.status}`)
+    }
+
+    if (!dados.sucesso || !dados.tabelas) {
+      throw new Error('Resposta inesperada na restauração.')
+    }
+
+    for (const tabela of TABELAS) {
+      const registros = dados.tabelas[tabela] || []
+
+      if (!Array.isArray(registros)) continue
+
+      for (const registro of registros) {
+        const local = prepararRegistroParaLocal(registro)
+        await db[tabela].add(local)
+      }
+
+      const maiorUpdatedAt = registros.reduce((maior, item) => {
+        if (!item.updatedAt) return maior
+        return !maior || item.updatedAt > maior
+          ? item.updatedAt
+          : maior
+      }, '')
+
+      if (maiorUpdatedAt) {
+        salvarUltimoPull(tabela, maiorUpdatedAt)
+      }
+    }
+
+    if (dados.meta) {
+      salvarMetaLocal(dados.meta)
+    }
+
+    salvarUltimoPullInicial()
+
+    atualizarEstadoGlobalSync({
+      sincronizando: false,
+      ultimaSincronizacao: new Date().toISOString(),
+      ultimoErro: null
+    })
+
+    return {
+      sucesso: true
+    }
+  } catch (err) {
+    atualizarEstadoGlobalSync({
+      sincronizando: false,
+      ultimoErro: err.message
+    })
+
+    throw err
+  }
+}
+
 
 export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
   if (autoSyncIniciado) return

@@ -92,6 +92,115 @@ const formatarNomeMes = (mesRef) => {
   return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
 }
 
+
+const obterDataFimMes = (mesRef) => {
+  const [ano, mes] = String(mesRef || '').split('-').map(Number)
+
+  if (!ano || !mes) return ''
+
+  const ultimoDia = new Date(ano, mes, 0).getDate()
+  return `${ano}-${String(mes).padStart(2, '0')}-${String(ultimoDia).padStart(2, '0')}`
+}
+
+const obterIntervaloMeta = (meta, mesReferenciaDashboard) => {
+  if (meta.periodoTipo === 'anual') {
+    const ano = meta.anoReferencia || String(new Date().getFullYear())
+
+    return {
+      inicio: `${ano}-01-01`,
+      fim: `${ano}-12-31`
+    }
+  }
+
+  if (meta.periodoTipo === 'personalizado') {
+    return {
+      inicio: meta.dataInicio || `${mesReferenciaDashboard}-01`,
+      fim: meta.dataFim || obterDataFimMes(mesReferenciaDashboard)
+    }
+  }
+
+  const mes = meta.mesReferencia || mesReferenciaDashboard
+
+  return {
+    inicio: `${mes}-01`,
+    fim: obterDataFimMes(mes)
+  }
+}
+
+const obterDataFinanceiraLancamento = (lancamento) => {
+  if (lancamento.metodoPagamento === 'cartao') {
+    return lancamento.faturaRef ? `${lancamento.faturaRef}-01` : ''
+  }
+
+  return String(lancamento.dataCompetencia || '')
+}
+
+const lancamentoDentroDoPeriodo = (lancamento, inicio, fim) => {
+  const data = obterDataFinanceiraLancamento(lancamento)
+
+  if (!data) return false
+
+  return data >= inicio && data <= fim
+}
+
+const calcularMeta = ({ meta, lancamentos, categorias, mesReferenciaDashboard }) => {
+  const valorAlvo = Number(meta.valorAlvo || meta.valor || 0)
+  const intervalo = obterIntervaloMeta(meta, mesReferenciaDashboard)
+
+  const lancamentosPeriodo = (lancamentos || [])
+    .filter((lancamento) => !lancamento.deletedAt)
+    .filter((lancamento) => lancamentoDentroDoPeriodo(lancamento, intervalo.inicio, intervalo.fim))
+    .filter((lancamento) => {
+      const categoria = categorias.find(
+        (item) => Number(item.id) === Number(lancamento.categoriaId)
+      )
+
+      return !categoriaEhReembolso(categoria)
+    })
+
+  if (meta.tipo === 'saldo_minimo') {
+    const receitas = lancamentosPeriodo
+      .filter((lancamento) => lancamento.tipo === 'receita')
+      .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
+
+    const despesas = lancamentosPeriodo
+      .filter((lancamento) => lancamento.tipo === 'despesa')
+      .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
+
+    const atual = receitas - despesas
+    const percentual = valorAlvo > 0 ? Math.max(0, (atual / valorAlvo) * 100) : 0
+    const alerta = valorAlvo > 0 && atual < valorAlvo
+
+    return {
+      atual,
+      valorAlvo,
+      percentual: Math.min(percentual, 100),
+      alerta,
+      textoStatus: alerta ? 'Abaixo da meta' : 'Meta atingida'
+    }
+  }
+
+  const atual = lancamentosPeriodo
+    .filter((lancamento) => lancamento.tipo === 'despesa')
+    .filter((lancamento) => Number(lancamento.categoriaId) === Number(meta.categoriaId))
+    .filter((lancamento) => {
+      if (!meta.subcategoriaId) return true
+      return Number(lancamento.subcategoriaId) === Number(meta.subcategoriaId)
+    })
+    .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
+
+  const percentual = valorAlvo > 0 ? (atual / valorAlvo) * 100 : 0
+  const alerta = valorAlvo > 0 && atual > valorAlvo
+
+  return {
+    atual,
+    valorAlvo,
+    percentual: Math.min(percentual, 100),
+    alerta,
+    textoStatus: alerta ? 'Limite ultrapassado' : 'Dentro da meta'
+  }
+}
+
 export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const [menuAberto, setMenuAberto] = useState(false)
   const [modoCategorias, setModoCategorias] = useState('grafico')
@@ -109,6 +218,12 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
   const cartoes = useLiveQuery(async () => {
     const todos = await db.cartoes.toArray()
     return todos.filter((cartao) => !cartao.deletedAt)
+  }, [])
+
+
+  const metas = useLiveQuery(async () => {
+    const todas = await db.metas.toArray()
+    return todas.filter((meta) => !meta.deletedAt)
   }, [])
 
   const mesReferencia = useMemo(() => {
@@ -187,6 +302,32 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     }))
   }, [doMes, categorias, totalDespesas])
 
+  const metasDashboard = useMemo(() => {
+    if (!metas || !lancamentos || !categorias) return []
+
+    return metas
+      .filter((meta) => meta.ativa !== false)
+      .filter((meta) => Boolean(meta.mostrarNoDashboard))
+      .map((meta) => {
+        const resultado = calcularMeta({
+          meta,
+          lancamentos,
+          categorias,
+          mesReferenciaDashboard: mesReferencia
+        })
+
+        const categoria = categorias.find(
+          (item) => Number(item.id) === Number(meta.categoriaId)
+        )
+
+        return {
+          ...meta,
+          categoria,
+          resultado
+        }
+      })
+  }, [metas, lancamentos, categorias, mesReferencia])
+
   const escolherLancamento = (config) => {
     setMenuAberto(false)
     onNovoLancamento(config)
@@ -256,6 +397,8 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         total={totalDespesas}
         onSelecionarCategoria={abrirCategoriaNoExtrato}
       />
+
+      <CardMetasDashboard metas={metasDashboard} />
 
       {menuAberto && (
         <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 px-4 pb-28 backdrop-blur-sm">
@@ -329,6 +472,78 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         <Plus size={30} />
       </button>
     </div>
+  )
+}
+
+
+function CardMetasDashboard({ metas }) {
+  if (!metas || metas.length === 0) return null
+
+  return (
+    <section className="card-premium rounded-[28px] p-4">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-black uppercase tracking-[0.22em] text-[#3AF2A1]">
+            Metas
+          </p>
+          <h2 className="mt-1 text-lg font-black text-[#F4FFF8]">
+            Metas em destaque
+          </h2>
+        </div>
+
+        <p className="rounded-full border border-[#1C2A24] bg-[#030504]/80 px-3 py-1 text-[11px] font-black text-[#91A99C]">
+          {metas.length}
+        </p>
+      </div>
+
+      <div className="space-y-3">
+        {metas.map((meta) => {
+          const resultado = meta.resultado || {}
+          const percentual = Number(resultado.percentual || 0)
+          const alerta = Boolean(resultado.alerta)
+          const tipoSaldo = meta.tipo === 'saldo_minimo'
+
+          return (
+            <div
+              key={meta.id}
+              className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3"
+            >
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-black text-[#F4FFF8]">
+                    {meta.nome || meta.descricao || 'Meta'}
+                  </p>
+
+                  <p className={`mt-0.5 text-[11px] font-semibold ${alerta ? 'text-red-300' : 'text-[#91A99C]'}`}>
+                    {resultado.textoStatus || 'Acompanhando meta'}
+                  </p>
+                </div>
+
+                <p className={`shrink-0 text-xs font-black ${alerta ? 'text-red-300' : 'text-[#3AF2A1]'}`}>
+                  {percentual.toLocaleString('pt-BR', { maximumFractionDigits: 0 })}%
+                </p>
+              </div>
+
+              <div className="h-2 overflow-hidden rounded-full bg-[#102018]">
+                <div
+                  className={`h-full rounded-full ${alerta ? 'bg-red-400' : 'bg-[#3AF2A1]'}`}
+                  style={{ width: `${Math.min(Math.max(percentual, 3), 100)}%` }}
+                />
+              </div>
+
+              <div className="mt-2 flex items-center justify-between text-[11px] font-semibold text-[#91A99C]">
+                <span>
+                  {tipoSaldo ? 'Saldo atual' : 'Usado'}: {formatarMoeda(resultado.atual)}
+                </span>
+                <span>
+                  Meta: {formatarMoeda(resultado.valorAlvo)}
+                </span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </section>
   )
 }
 

@@ -22,7 +22,7 @@ const schema = {
     '++id, uuid, nome, categoriaId, updatedAt, deletedAt, syncStatus',
 
   metas:
-    '++id, uuid, tipo, categoriaId, dataInicio, dataFim, ativo, updatedAt, deletedAt, syncStatus',
+    '++id, uuid, nome, tipo, periodoTipo, mesReferencia, anoReferencia, dataInicio, dataFim, categoriaId, subcategoriaId, valorAlvo, mostrarNoDashboard, ativa, updatedAt, deletedAt, syncStatus',
 
   syncLog:
     '++id, tabela, uuid, action, timestamp, deviceId, resolved'
@@ -55,6 +55,9 @@ db.version(2)
       }
     })
   })
+
+
+db.version(3).stores(schema)
 
 export const gerarUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
