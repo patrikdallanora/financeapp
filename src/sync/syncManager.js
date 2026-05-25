@@ -753,7 +753,7 @@ export const restaurarBaseLocalDoSheets = async () => {
       if (!Array.isArray(registros)) continue
 
       for (const registro of registros) {
-        const local = prepararRegistroParaLocal(registro)
+        const local = prepararRegistroRestauracaoParaLocal(registro)
         await db[tabela].add(local)
       }
 
@@ -843,4 +843,18 @@ export const pararAutoSync = () => {
 
   clearTimeout(debounceTimer)
   autoSyncIniciado = false
+}
+
+const prepararRegistroRestauracaoParaLocal = (registro) => {
+  const copia = { ...registro }
+
+  if (copia.id !== undefined && copia.id !== '') {
+    copia.id = Number(copia.id)
+  }
+
+  return {
+    ...copia,
+    syncStatus: 'synced',
+    lastSyncedAt: new Date().toISOString()
+  }
 }
