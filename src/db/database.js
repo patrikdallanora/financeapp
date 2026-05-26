@@ -10,8 +10,8 @@ const schema = {
     '++id, uuid, nome, ativo, updatedAt, deletedAt, syncStatus',
 
   lancamentos:
-    '++id, uuid, tipo, usuarioId, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, faturaRef, categoriaId, subcategoriaId, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus',
-
+    '++id, uuid, tipo, usuarioId, usuarioUuid, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, cartaoUuid, faturaRef, categoriaId, categoriaUuid, subcategoriaId, subcategoriaUuid, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus',
+  
   faturas:
     '++id, uuid, cartaoId, faturaRef, status, updatedAt, syncStatus',
 
@@ -19,8 +19,8 @@ const schema = {
     '++id, uuid, nome, tipo, updatedAt, deletedAt, syncStatus',
 
   subcategorias:
-    '++id, uuid, nome, categoriaId, updatedAt, deletedAt, syncStatus',
-
+  '++id, uuid, nome, categoriaId, categoriaUuid, updatedAt, deletedAt, syncStatus',
+  
   metas:
     '++id, uuid, nome, tipo, periodoTipo, mesReferencia, anoReferencia, dataInicio, dataFim, categoriaId, subcategoriaId, valorAlvo, mostrarNoDashboard, ativa, updatedAt, deletedAt, syncStatus',
 
@@ -58,6 +58,66 @@ db.version(2)
 
 
 db.version(3).stores(schema)
+
+db.version(4)
+  .stores(schema)
+  .upgrade(async (tx) => {
+    const categorias = await tx.table('categorias').toArray()
+    const subcategorias = await tx.table('subcategorias').toArray()
+    const cartoes = await tx.table('cartoes').toArray()
+    const usuarios = await tx.table('usuarios').toArray()
+
+    const mapaCategorias = new Map(
+      categorias.map((item) => [Number(item.id), item.uuid])
+    )
+
+    const mapaSubcategorias = new Map(
+      subcategorias.map((item) => [Number(item.id), item.uuid])
+    )
+
+    const mapaCartoes = new Map(
+      cartoes.map((item) => [Number(item.id), item.uuid])
+    )
+
+    const mapaUsuarios = new Map(
+      usuarios.map((item) => [Number(item.id), item.uuid])
+    )
+
+    await tx.table('lancamentos').toCollection().modify((lancamento) => {
+      if (lancamento.categoriaId) {
+        lancamento.categoriaUuid =
+          mapaCategorias.get(Number(lancamento.categoriaId)) || null
+      }
+
+      if (lancamento.subcategoriaId) {
+        lancamento.subcategoriaUuid =
+          mapaSubcategorias.get(Number(lancamento.subcategoriaId)) || null
+      }
+
+      if (lancamento.cartaoId) {
+        lancamento.cartaoUuid =
+          mapaCartoes.get(Number(lancamento.cartaoId)) || null
+      }
+
+      if (lancamento.usuarioId) {
+        lancamento.usuarioUuid =
+          mapaUsuarios.get(Number(lancamento.usuarioId)) || null
+      }
+
+      lancamento.updatedAt = new Date().toISOString()
+      lancamento.syncStatus = 'pending'
+    })
+
+    await tx.table('subcategorias').toCollection().modify((subcategoria) => {
+  if (subcategoria.categoriaId) {
+    subcategoria.categoriaUuid =
+      mapaCategorias.get(Number(subcategoria.categoriaId)) || null
+  }
+
+  subcategoria.updatedAt = new Date().toISOString()
+  subcategoria.syncStatus = 'pending'
+})
+  })
 
 export const gerarUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {

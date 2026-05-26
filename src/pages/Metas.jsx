@@ -50,6 +50,30 @@ const categoriaEhReembolso = (categoria) => {
   return nome === 'reembolso' || nome === 'reembolsos'
 }
 
+const encontrarCategoriaDoLancamento = (categorias, lancamento) => {
+  return categorias.find(
+    (categoria) =>
+      categoria.uuid === lancamento.categoriaUuid ||
+      Number(categoria.id) === Number(lancamento.categoriaId)
+  )
+}
+
+const encontrarCategoriaDaMeta = (categorias, meta) => {
+  return categorias.find(
+    (categoria) =>
+      categoria.uuid === meta.categoriaUuid ||
+      Number(categoria.id) === Number(meta.categoriaId)
+  )
+}
+
+const encontrarSubcategoriaDaMeta = (subcategorias, meta) => {
+  return subcategorias.find(
+    (subcategoria) =>
+      subcategoria.uuid === meta.subcategoriaUuid ||
+      Number(subcategoria.id) === Number(meta.subcategoriaId)
+  )
+}
+
 const obterMesAtual = () => new Date().toISOString().slice(0, 7)
 const obterAnoAtual = () => String(new Date().getFullYear())
 
@@ -111,12 +135,10 @@ const calcularMeta = ({ meta, lancamentos, categorias }) => {
     .filter((lancamento) => !lancamento.deletedAt)
     .filter((lancamento) => lancamentoDentroDoPeriodo(lancamento, intervalo.inicio, intervalo.fim))
     .filter((lancamento) => {
-      const categoria = categorias.find(
-        (item) => Number(item.id) === Number(lancamento.categoriaId)
-      )
+  const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
 
-      return !categoriaEhReembolso(categoria)
-    })
+  return !categoriaEhReembolso(categoria)
+})
 
   if (meta.tipo === 'saldo_minimo') {
     const receitas = lancamentosPeriodo
@@ -142,10 +164,21 @@ const calcularMeta = ({ meta, lancamentos, categorias }) => {
 
   const atual = lancamentosPeriodo
     .filter((lancamento) => lancamento.tipo === 'despesa')
-    .filter((lancamento) => Number(lancamento.categoriaId) === Number(meta.categoriaId))
     .filter((lancamento) => {
-      if (!meta.subcategoriaId) return true
-      return Number(lancamento.subcategoriaId) === Number(meta.subcategoriaId)
+  const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
+
+  return (
+    categoria?.uuid === meta.categoriaUuid ||
+    Number(categoria?.id) === Number(meta.categoriaId)
+  )
+})
+    .filter((lancamento) => {
+      if (!meta.subcategoriaId && !meta.subcategoriaUuid) return true
+
+return (
+  lancamento.subcategoriaUuid === meta.subcategoriaUuid ||
+  Number(lancamento.subcategoriaId) === Number(meta.subcategoriaId)
+)
     })
     .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
 
@@ -202,25 +235,29 @@ export default function Metas() {
   }, [])
 
   const subcategoriasDaCategoria = useMemo(() => {
-    if (!subcategorias || !formulario.categoriaId) return []
+  if (!subcategorias || !categorias || !formulario.categoriaId) return []
 
-    return subcategorias.filter(
-      (subcategoria) => Number(subcategoria.categoriaId) === Number(formulario.categoriaId)
-    )
-  }, [subcategorias, formulario.categoriaId])
+  const categoriaSelecionada = categorias.find(
+    (categoria) => Number(categoria.id) === Number(formulario.categoriaId)
+  )
+
+  if (!categoriaSelecionada) return []
+
+  return subcategorias.filter(
+    (subcategoria) =>
+      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
+      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
+  )
+}, [subcategorias, categorias, formulario.categoriaId])
 
   const metasComResultado = useMemo(() => {
     if (!metas || !lancamentos || !categorias) return []
 
     return metas
       .map((meta) => {
-        const categoria = categorias.find(
-          (item) => Number(item.id) === Number(meta.categoriaId)
-        )
+        const categoria = encontrarCategoriaDaMeta(categorias, meta)
 
-        const subcategoria = subcategorias?.find(
-          (item) => Number(item.id) === Number(meta.subcategoriaId)
-        )
+        const subcategoria = encontrarSubcategoriaDaMeta(subcategorias || [], meta)
 
         return {
           ...meta,
@@ -293,8 +330,25 @@ export default function Metas() {
       return
     }
 
+    const categoriaSelecionada = categorias.find(
+  (categoria) => Number(categoria.id) === Number(formulario.categoriaId)
+)
+
+const subcategoriaSelecionada = subcategorias.find(
+  (subcategoria) => Number(subcategoria.id) === Number(formulario.subcategoriaId)
+)
+
     const dados = {
       nome,
+      categoriaUuid:
+  formulario.tipo === 'gasto_categoria'
+    ? categoriaSelecionada?.uuid || null
+    : null,
+
+subcategoriaUuid:
+  formulario.tipo === 'gasto_categoria' && formulario.subcategoriaId
+    ? subcategoriaSelecionada?.uuid || null
+    : null,
       tipo: formulario.tipo,
       periodoTipo: formulario.periodoTipo,
       mesReferencia: formulario.periodoTipo === 'mensal' ? formulario.mesReferencia : null,

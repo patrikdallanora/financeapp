@@ -693,8 +693,8 @@ export const agendarSync = () => {
   clearTimeout(debounceTimer)
 
   debounceTimer = setTimeout(() => {
-    executarPullInicial()
-  }, DEBOUNCE_SYNC)
+  executarSync()
+}, DEBOUNCE_SYNC)
 }
 
 
@@ -801,8 +801,8 @@ export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
   autoSyncIniciado = true
 
   if (executarAoIniciar) {
-    executarSync()
-  }
+  executarPullInicial()
+}
 
   window.addEventListener('online', () => {
     atualizarEstadoGlobalSync({

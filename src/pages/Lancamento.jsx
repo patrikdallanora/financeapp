@@ -144,12 +144,20 @@ export default function Lancamento({ onVoltar, configInicial }) {
   }, [categorias, tipo])
 
   const subcategoriasFiltradas = useMemo(() => {
-    if (!subcategorias || !categoriaId) return []
+  if (!subcategorias || !categorias || !categoriaId) return []
 
-    return subcategorias.filter(
-      (subcategoria) => subcategoria.categoriaId === Number(categoriaId)
-    )
-  }, [subcategorias, categoriaId])
+  const categoriaSelecionada = categorias.find(
+    (categoria) => Number(categoria.id) === Number(categoriaId)
+  )
+
+  if (!categoriaSelecionada) return []
+
+  return subcategorias.filter(
+    (subcategoria) =>
+      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
+      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
+  )
+}, [subcategorias, categorias, categoriaId])
 
   const cartaoSelecionado = useMemo(() => {
     if (!cartoes || !cartaoId) return null
@@ -193,17 +201,34 @@ export default function Lancamento({ onVoltar, configInicial }) {
 
       if (!chave || mapa.has(chave)) continue
 
-      const categoria = categorias.find((item) => item.id === Number(lancamento.categoriaId))
-      const subcategoria = subcategorias.find((item) => item.id === Number(lancamento.subcategoriaId))
-      const cartao = cartoes?.find((item) => item.id === Number(lancamento.cartaoId))
+      const categoria = categorias.find(
+  (item) =>
+    item.uuid === lancamento.categoriaUuid ||
+    item.id === Number(lancamento.categoriaId)
+)
+
+const subcategoria = subcategorias.find(
+  (item) =>
+    item.uuid === lancamento.subcategoriaUuid ||
+    item.id === Number(lancamento.subcategoriaId)
+)
+
+const cartao = cartoes?.find(
+  (item) =>
+    item.uuid === lancamento.cartaoUuid ||
+    item.id === Number(lancamento.cartaoId)
+)
 
       mapa.set(chave, {
         descricao: lancamento.descricao,
         tipo: lancamento.tipo,
         metodoPagamento: lancamento.metodoPagamento,
         categoriaId: lancamento.categoriaId,
+        categoriaUuid: lancamento.categoriaUuid,
         subcategoriaId: lancamento.subcategoriaId,
+        subcategoriaUuid: lancamento.subcategoriaUuid,
         cartaoId: lancamento.cartaoId,
+        cartaoUuid: lancamento.cartaoUuid,
         categoria,
         subcategoria,
         cartao
@@ -309,18 +334,38 @@ export default function Lancamento({ onVoltar, configInicial }) {
     const statusFinal = mostrarStatus ? status : 'pendente'
     const dataPagamento = statusFinal === 'pago' ? dataCompetencia : null
 
+    const usuario = usuarios?.find(
+  (item) => Number(item.id) === Number(usuarioSelecionado)
+)
+
+const cartao = cartoes?.find(
+  (item) => Number(item.id) === Number(cartaoId)
+)
+
+const categoria = categorias?.find(
+  (item) => Number(item.id) === Number(categoriaId)
+)
+
+const subcategoria = subcategorias?.find(
+  (item) => Number(item.id) === Number(subcategoriaId)
+)
+
     return {
       tipo,
       usuarioId: Number(usuarioSelecionado),
+      usuarioUuid: usuario?.uuid || null,
       descricao: descricao.trim(),
       valor: valorNumerico,
       dataCompetencia,
       dataPagamento,
       metodoPagamento,
       cartaoId: metodoPagamento === 'cartao' ? Number(cartaoId) : null,
+      cartaoUuid: metodoPagamento === 'cartao' ? cartao?.uuid || null : null,
       faturaRef: metodoPagamento === 'cartao' ? faturaSelecionada : null,
       categoriaId: Number(categoriaId),
+      categoriaUuid: categoria?.uuid || null,
       subcategoriaId: Number(subcategoriaId),
+      subcategoriaUuid: subcategoria?.uuid || null,
       status: statusFinal,
       recorrente: tipoLancamento === 'fixa_mensal',
       recorrenciaId: null,

@@ -50,6 +50,14 @@ const categoriaEhReembolso = (categoria) => {
   return nome === 'reembolso' || nome === 'reembolsos'
 }
 
+const encontrarCategoriaDoLancamento = (categorias, lancamento) => {
+  return categorias.find(
+    (categoria) =>
+      categoria.uuid === lancamento.categoriaUuid ||
+      Number(categoria.id) === Number(lancamento.categoriaId)
+  )
+}
+
 const obterDiaFechamentoCartao = (cartao) => {
   const candidatos = [
     cartao?.fechamento,
@@ -151,9 +159,7 @@ const calcularMeta = ({ meta, lancamentos, categorias, mesReferenciaDashboard })
     .filter((lancamento) => !lancamento.deletedAt)
     .filter((lancamento) => lancamentoDentroDoPeriodo(lancamento, intervalo.inicio, intervalo.fim))
     .filter((lancamento) => {
-      const categoria = categorias.find(
-        (item) => Number(item.id) === Number(lancamento.categoriaId)
-      )
+      const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
 
       return !categoriaEhReembolso(categoria)
     })
@@ -182,7 +188,14 @@ const calcularMeta = ({ meta, lancamentos, categorias, mesReferenciaDashboard })
 
   const atual = lancamentosPeriodo
     .filter((lancamento) => lancamento.tipo === 'despesa')
-    .filter((lancamento) => Number(lancamento.categoriaId) === Number(meta.categoriaId))
+    .filter((lancamento) => {
+  const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
+
+  return (
+    categoria?.uuid === meta.categoriaUuid ||
+    Number(categoria?.id) === Number(meta.categoriaId)
+  )
+})
     .filter((lancamento) => {
       if (!meta.subcategoriaId) return true
       return Number(lancamento.subcategoriaId) === Number(meta.subcategoriaId)
@@ -246,9 +259,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         return String(lancamento.dataCompetencia || '').startsWith(mesReferencia)
       })
       .filter((lancamento) => {
-        const categoria = categorias.find(
-          (item) => Number(item.id) === Number(lancamento.categoriaId)
-        )
+        const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
 
         return !categoriaEhReembolso(categoria)
       })
@@ -272,9 +283,7 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     doMes
       .filter((lancamento) => lancamento.tipo === 'despesa')
       .forEach((lancamento) => {
-        const categoria = categorias.find(
-          (item) => Number(item.id) === Number(lancamento.categoriaId)
-        )
+        const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
 
         if (!categoria) return
         if (categoriaEhReembolso(categoria)) return
@@ -317,8 +326,10 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         })
 
         const categoria = categorias.find(
-          (item) => Number(item.id) === Number(meta.categoriaId)
-        )
+  (item) =>
+    item.uuid === meta.categoriaUuid ||
+    Number(item.id) === Number(meta.categoriaId)
+)
 
         return {
           ...meta,

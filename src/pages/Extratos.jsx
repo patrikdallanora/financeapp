@@ -200,7 +200,14 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [mesAtual, setMesAtual] = useState(obterMesInicial(filtroInicial))
   const [filtro, setFiltro] = useState(obterFiltroInicial(filtroInicial))
   const [filtroCategoria, setFiltroCategoria] = useState(obterCategoriaInicial(filtroInicial))
-  const [filtroTipo, setFiltroTipo] = useState(filtrosIniciais.tipo)
+  const [filtroTipo, setFiltroTipo] = useState(() => {
+  if (typeof filtroInicial === 'object' && filtroInicial?.filtro) {
+    if (filtroInicial.filtro === 'receita') return 'receita'
+    if (filtroInicial.filtro === 'despesa') return 'despesa'
+  }
+
+  return filtrosIniciais.tipo
+})
   const [filtroPagamento, setFiltroPagamento] = useState(filtrosIniciais.pagamento)
   const [filtroStatus, setFiltroStatus] = useState(filtrosIniciais.status)
   const [filtroCategoriaId, setFiltroCategoriaId] = useState(filtrosIniciais.categoriaId)
@@ -229,7 +236,17 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     setMesAtual(obterMesInicial(filtroInicial))
     setFiltro(obterFiltroInicial(filtroInicial))
     setFiltroCategoria(obterCategoriaInicial(filtroInicial))
+   if (typeof filtroInicial === 'object' && filtroInicial?.filtro) {
+  if (filtroInicial.filtro === 'receita') {
+    setFiltroTipo('receita')
+  } else if (filtroInicial.filtro === 'despesa') {
+    setFiltroTipo('despesa')
+  } else {
     setFiltroTipo(novosFiltros.tipo)
+  }
+} else {
+  setFiltroTipo(novosFiltros.tipo)
+}
     setFiltroPagamento(novosFiltros.pagamento)
     setFiltroStatus(novosFiltros.status)
     setFiltroCategoriaId(novosFiltros.categoriaId)
@@ -288,9 +305,23 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     if (!lancamentos || !categorias || !subcategorias || !cartoes) return []
 
     return lancamentos.map((lancamento) => {
-      const categoria = categorias.find((item) => item.id === Number(lancamento.categoriaId))
-      const subcategoria = subcategorias.find((item) => item.id === Number(lancamento.subcategoriaId))
-      const cartao = cartoes.find((item) => item.id === Number(lancamento.cartaoId))
+      const categoria = categorias.find(
+  (item) =>
+    item.uuid === lancamento.categoriaUuid ||
+    item.id === Number(lancamento.categoriaId)
+)
+
+const subcategoria = subcategorias.find(
+  (item) =>
+    item.uuid === lancamento.subcategoriaUuid ||
+    item.id === Number(lancamento.subcategoriaId)
+)
+
+const cartao = cartoes.find(
+  (item) =>
+    item.uuid === lancamento.cartaoUuid ||
+    item.id === Number(lancamento.cartaoId)
+)
 
       return {
         ...lancamento,
@@ -303,13 +334,23 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     })
   }, [lancamentos, categorias, subcategorias, cartoes])
 
-  const subcategoriasFiltradas = useMemo(() => {
-    if (!subcategorias || filtroCategoriaId === 'todos') return []
+const subcategoriasFiltradas = useMemo(() => {
+  if (!subcategorias || !categorias || filtroCategoriaId === 'todos') {
+    return []
+  }
 
-    return subcategorias.filter(
-      (subcategoria) => Number(subcategoria.categoriaId) === Number(filtroCategoriaId)
-    )
-  }, [subcategorias, filtroCategoriaId])
+  const categoriaSelecionada = categorias.find(
+    (categoria) => Number(categoria.id) === Number(filtroCategoriaId)
+  )
+
+  if (!categoriaSelecionada) return []
+
+  return subcategorias.filter(
+    (subcategoria) =>
+      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
+      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
+  )
+}, [subcategorias, categorias, filtroCategoriaId])
 
   const lancamentosFiltrados = useMemo(() => {
     const termo = normalizarTexto(busca)
@@ -367,11 +408,11 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
       })
       .filter((lancamento) => {
         if (filtroCategoriaId === 'todos') return true
-        return Number(lancamento.categoriaId) === Number(filtroCategoriaId)
+        return Number(lancamento.categoria?.id) === Number(filtroCategoriaId)
       })
       .filter((lancamento) => {
         if (filtroSubcategoriaId === 'todos') return true
-        return Number(lancamento.subcategoriaId) === Number(filtroSubcategoriaId)
+        return Number(lancamento.subcategoria?.id) === Number(filtroSubcategoriaId)
       })
       .filter((lancamento) => {
         if (filtroUsuarioId === 'todos') return true
@@ -379,7 +420,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
       })
       .filter((lancamento) => {
         if (filtroCartaoId === 'todos') return true
-        return Number(lancamento.cartaoId) === Number(filtroCartaoId)
+        return Number(lancamento.cartao?.id) === Number(filtroCartaoId)
       })
       .filter((lancamento) => {
         if (!termo) return true
@@ -437,7 +478,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     )
 
     for (const lancamento of itensCartao) {
-      const cartaoId = lancamento.cartaoId || 'sem-cartao'
+      const cartaoId = lancamento.cartaoUuid || lancamento.cartaoId || 'sem-cartao'
       const faturaRef = lancamento.faturaRef || mesAtual
       const chave = `${cartaoId}-${faturaRef}`
 
@@ -701,12 +742,22 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
         return
       }
 
-      alteracoes = {
-        categoriaId: Number(categoriaEdicaoId),
-        subcategoriaId: Number(subcategoriaEdicaoId),
-        updatedAt: agora,
-        syncStatus: 'pending'
-      }
+      const categoriaSelecionada = categorias.find(
+  (categoria) => Number(categoria.id) === Number(categoriaEdicaoId)
+)
+
+const subcategoriaSelecionada = subcategorias.find(
+  (subcategoria) => Number(subcategoria.id) === Number(subcategoriaEdicaoId)
+)
+
+alteracoes = {
+  categoriaId: Number(categoriaEdicaoId),
+  categoriaUuid: categoriaSelecionada?.uuid || null,
+  subcategoriaId: Number(subcategoriaEdicaoId),
+  subcategoriaUuid: subcategoriaSelecionada?.uuid || null,
+  updatedAt: agora,
+  syncStatus: 'pending'
+}
     }
 
     if (!alteracoes) return
@@ -732,12 +783,22 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   }, [categorias, editor])
 
   const subcategoriasEditor = useMemo(() => {
-    if (!subcategorias || !categoriaEdicaoId) return []
+  if (!subcategorias || !categorias || !categoriaEdicaoId) {
+    return []
+  }
 
-    return subcategorias.filter(
-      (subcategoria) => subcategoria.categoriaId === Number(categoriaEdicaoId)
-    )
-  }, [subcategorias, categoriaEdicaoId])
+  const categoriaSelecionada = categorias.find(
+    (categoria) => Number(categoria.id) === Number(categoriaEdicaoId)
+  )
+
+  if (!categoriaSelecionada) return []
+
+  return subcategorias.filter(
+    (subcategoria) =>
+      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
+      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
+  )
+}, [subcategorias, categorias, categoriaEdicaoId])
 
   if (!lancamentos || !categorias || !subcategorias || !cartoes) {
     return (
