@@ -3,7 +3,7 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeft, ChevronDown, Save, Sparkles } from 'lucide-react'
 
 import { db, criarRegistroBase, agora, gerarUUID } from '../db/database'
-import { agendarSync } from '../sync/syncManager'
+import { agendarSync, executarSync } from '../sync/syncManager'
 import { Botao } from '../components/Botao'
 import { CampoTexto } from '../components/CampoTexto'
 import { CardPremium } from '../components/CardPremium'
@@ -433,6 +433,8 @@ const subcategoria = subcategorias?.find(
         parcelamentoId: null
       })
     }
+
+    await executarSync()
   }
 
   const salvar = async () => {
