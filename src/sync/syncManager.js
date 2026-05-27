@@ -56,13 +56,24 @@ const obterUltimoPull = (tabela) => {
   return localStorage.getItem(obterChaveUltimoPull(tabela)) || ''
 }
 
+const obterUpdatedAfterSeguro = (tabela) => {
+  const ultimoPull = obterUltimoPull(tabela)
+
+  if (!ultimoPull) return ''
+
+  const data = new Date(ultimoPull)
+  data.setMinutes(data.getMinutes() - 10)
+
+  return data.toISOString()
+}
+
 const salvarUltimoPull = (tabela, dataISO) => {
   localStorage.setItem(obterChaveUltimoPull(tabela), dataISO)
 }
 
 const obterMapaUltimosPulls = () => {
   return TABELAS.reduce((mapa, tabela) => {
-    mapa[tabela] = obterUltimoPull(tabela)
+   mapa[tabela] = obterUpdatedAfterSeguro(tabela)
     return mapa
   }, {})
 }
@@ -370,7 +381,7 @@ export const pullSync = async () => {
 
   for (const tabela of TABELAS) {
     try {
-      const updatedAfter = obterUltimoPull(tabela)
+      const updatedAfter = obterUpdatedAfterSeguro(tabela)
 
       const url = new URL(API_URL)
       url.searchParams.set('tabela', tabela)
@@ -653,9 +664,17 @@ export const executarSync = async () => {
   })
 
   try {
-    const push = await pushSync()
-    const pull = await pullSync()
-    const sucesso = push.sucesso && pull.sucesso
+    const pullAntes = await pullSync()
+const push = await pushSync()
+const pullDepois = await pullSync()
+
+const pull = {
+  sucesso: pullAntes.sucesso && pullDepois.sucesso,
+  antes: pullAntes,
+  depois: pullDepois
+}
+
+const sucesso = push.sucesso && pull.sucesso
 
     atualizarEstadoGlobalSync({
       sincronizando: false,
