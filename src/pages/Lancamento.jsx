@@ -434,7 +434,7 @@ const subcategoria = subcategorias?.find(
       })
     }
 
-    await executarSync()
+    executarSync()
   }
 
   const salvar = async () => {
