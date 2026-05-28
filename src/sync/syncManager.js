@@ -13,8 +13,8 @@ const TABELAS = [
   'metas'
 ]
 
-const INTERVALO_SYNC = 1000 * 60
-const DEBOUNCE_SYNC = 2500
+const INTERVALO_SYNC = 1000 * 15
+const DEBOUNCE_SYNC = 800
 const INTERVALO_MINIMO_PULL_INICIAL = 1000 * 20
 
 let sincronizando = false
