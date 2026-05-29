@@ -558,60 +558,37 @@ export const executarPullInicial = async () => {
   })
 
   try {
-    const check = await checkChangesSync()
+  const pull = await pullBatchSync(TABELAS)
 
-    const tabelasComMudanca = TABELAS.filter((tabela) => check.changes[tabela])
+  atualizarEstadoGlobalSync({
+    sincronizando: false,
+    ultimaSincronizacao: pull.sucesso
+      ? new Date().toISOString()
+      : obterStatusSync().ultimaSincronizacao,
+    ultimoErro: pull.sucesso ? null : 'Falha ao atualizar dados na abertura.'
+  })
 
-    if (tabelasComMudanca.length === 0) {
-      salvarMetaLocal(check.meta)
-      salvarUltimoPullInicial()
+  if (pull.sucesso) {
+    salvarUltimoPullInicial()
+  }
 
-      atualizarEstadoGlobalSync({
-        sincronizando: false,
-        ultimaSincronizacao: new Date().toISOString(),
-        ultimoErro: null
-      })
+  return {
+    sucesso: pull.sucesso,
+    etapa: 'pull-inicial',
+    pull
+  }
+} catch (err) {
+  atualizarEstadoGlobalSync({
+    sincronizando: false,
+    ultimoErro: err.message
+  })
 
-      return {
-        sucesso: true,
-        etapa: 'pull-inicial',
-        semAlteracoes: true,
-        check
-      }
-    }
-
-    const pull = await pullBatchSync(tabelasComMudanca)
-
-    atualizarEstadoGlobalSync({
-      sincronizando: false,
-      ultimaSincronizacao: pull.sucesso
-        ? new Date().toISOString()
-        : obterStatusSync().ultimaSincronizacao,
-      ultimoErro: pull.sucesso ? null : 'Falha ao atualizar dados na abertura.'
-    })
-
-    if (pull.sucesso) {
-      salvarUltimoPullInicial()
-    }
-
-    return {
-      sucesso: pull.sucesso,
-      etapa: 'pull-inicial',
-      tabelasComMudanca,
-      pull
-    }
-  } catch (err) {
-    atualizarEstadoGlobalSync({
-      sincronizando: false,
-      ultimoErro: err.message
-    })
-
-    return {
-      sucesso: false,
-      erro: err.message,
-      etapa: 'pull-inicial'
-    }
-  } finally {
+  return {
+    sucesso: false,
+    erro: err.message,
+    etapa: 'pull-inicial'
+  }
+} finally {
     pullInicialExecutando = false
   }
 }
