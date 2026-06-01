@@ -124,6 +124,17 @@ const formatarNomeMes = (mesRef) => {
   return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
 }
 
+const formatarMesSelect = (mesRef) => {
+  const [ano, mes] = String(mesRef || '').split('-').map(Number)
+
+  if (!ano || !mes) return 'Mês'
+
+  const data = new Date(ano, mes - 1, 1)
+  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+
+  return `${nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)}/${String(ano).slice(-2)}`
+}
+
 
 const obterDataFimMes = (mesRef) => {
   const [ano, mes] = String(mesRef || '').split('-').map(Number)
@@ -267,13 +278,38 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     return todas.filter((meta) => !meta.deletedAt)
   }, [])
 
-  const mesReferencia = useMemo(() => {
-    return obterMesReferenciaDashboard(cartoes || [])
-  }, [cartoes])
+  const mesReferenciaPadrao = useMemo(() => {
+  return obterMesReferenciaDashboard(cartoes || [])
+}, [cartoes])
+
+const [mesSelecionado, setMesSelecionado] = useState('')
+
+const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
   const nomeMesReferencia = useMemo(() => {
     return formatarNomeMes(mesReferencia)
   }, [mesReferencia])
+
+  const opcoesMeses = useMemo(() => {
+  const meses = new Set()
+
+  if (mesReferenciaPadrao) {
+    meses.add(mesReferenciaPadrao)
+  }
+
+  ;(lancamentos || []).forEach((lancamento) => {
+    if (lancamento.metodoPagamento === 'cartao' && lancamento.faturaRef) {
+      meses.add(String(lancamento.faturaRef).slice(0, 7))
+      return
+    }
+
+    if (lancamento.dataCompetencia) {
+      meses.add(String(lancamento.dataCompetencia).slice(0, 7))
+    }
+  })
+
+  return Array.from(meses).sort((a, b) => b.localeCompare(a))
+}, [lancamentos, mesReferenciaPadrao])
 
   const doMes = useMemo(() => {
     if (!lancamentos || !categorias) return []
@@ -449,9 +485,21 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
           Dashboard
         </h1>
 
-        <p className="mt-1 text-sm text-[#91A99C]">
-          Resumo financeiro de {nomeMesReferencia}.
-        </p>
+        <p className="mt-1 flex items-center gap-1 text-sm text-[#91A99C]">
+  <span>Resumo financeiro de</span>
+
+  <select
+    value={mesReferencia}
+    onChange={(event) => setMesSelecionado(event.target.value)}
+    className="h-[22px] max-w-[92px] rounded-full border border-[#1C2A24] bg-[#07100B] px-2 text-[11px] font-black leading-none text-[#3AF2A1] outline-none"
+  >
+    {opcoesMeses.map((mes) => (
+      <option key={mes} value={mes}>
+        {formatarMesSelect(mes)}
+      </option>
+    ))}
+  </select>
+</p>
       </header>
 
       <div className="grid grid-cols-3 gap-2">
