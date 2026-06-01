@@ -50,6 +50,30 @@ const categoriaEhReembolso = (categoria) => {
   return nome === 'reembolso' || nome === 'reembolsos'
 }
 
+const formatarPercentual = (valor) => {
+  return `${Number(valor || 0).toLocaleString('pt-BR', {
+    maximumFractionDigits: 1
+  })}%`
+}
+
+const obterChaveUsuarioLancamento = (lancamento, usuarios = []) => {
+  const usuario = usuarios.find(
+    (item) =>
+      item.uuid === lancamento.usuarioUuid ||
+      Number(item.id) === Number(lancamento.usuarioId)
+  )
+
+  const nome = normalizarTexto(usuario?.nome)
+
+  if (nome === 'pk') return 'PK'
+  if (nome === 'grazi') return 'Grazi'
+
+  if (Number(lancamento.usuarioId) === 1) return 'PK'
+  if (Number(lancamento.usuarioId) === 2) return 'Grazi'
+
+  return null
+}
+
 const encontrarCategoriaDoLancamento = (categorias, lancamento) => {
   return categorias.find(
     (categoria) =>
@@ -233,6 +257,10 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     return todos.filter((cartao) => !cartao.deletedAt)
   }, [])
 
+  const usuarios = useLiveQuery(async () => {
+  const todos = await db.usuarios.toArray()
+  return todos.filter((usuario) => !usuario.deletedAt)
+}, [])
 
   const metas = useLiveQuery(async () => {
     const todas = await db.metas.toArray()
@@ -274,6 +302,63 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
     .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
 
   const saldo = totalReceitas - totalDespesas
+
+  const participacaoUsuarios = useMemo(() => {
+  const base = {
+    PK: {
+      nome: 'PK',
+      pago: 0,
+      aberto: 0
+    },
+    Grazi: {
+      nome: 'Grazi',
+      pago: 0,
+      aberto: 0
+    }
+  }
+
+  doMes
+    .filter((lancamento) => lancamento.tipo === 'despesa')
+    .forEach((lancamento) => {
+      const chaveUsuario = obterChaveUsuarioLancamento(lancamento, usuarios || [])
+
+      if (!chaveUsuario || !base[chaveUsuario]) return
+
+      const valor = Number(lancamento.valor || 0)
+
+      const estaPago =
+        lancamento.metodoPagamento === 'cartao'
+          ? Boolean(lancamento.faturaFechada)
+          : lancamento.status === 'pago'
+
+      if (estaPago) {
+        base[chaveUsuario].pago += valor
+      } else {
+        base[chaveUsuario].aberto += valor
+      }
+    })
+
+  const lista = Object.values(base).map((usuario) => {
+    const total = usuario.pago + usuario.aberto
+
+    return {
+      ...usuario,
+      total,
+      percentualPago: total > 0 ? (usuario.pago / total) * 100 : 0,
+      percentualAberto: total > 0 ? (usuario.aberto / total) * 100 : 0
+    }
+  })
+
+  const totalGeral = lista.reduce((total, usuario) => total + usuario.total, 0)
+
+  return {
+    totalGeral,
+    usuarios: lista.map((usuario) => ({
+      ...usuario,
+      percentualTotal: totalGeral > 0 ? (usuario.total / totalGeral) * 100 : 0
+    }))
+  }
+}, [doMes, usuarios])
 
   const gastosPorCategoria = useMemo(() => {
     if (!categorias) return []
@@ -409,6 +494,10 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
         onSelecionarCategoria={abrirCategoriaNoExtrato}
       />
 
+      <CardParticipacaoUsuarios dados={participacaoUsuarios} />
+
+      
+
       <CardMetasDashboard metas={metasDashboard} />
 
       {menuAberto && (
@@ -482,6 +571,116 @@ export default function Dashboard({ onNovoLancamento, onAbrirExtratos }) {
       >
         <Plus size={30} />
       </button>
+    </div>
+  )
+}
+
+function CardParticipacaoUsuarios({ dados }) {
+  const usuarios = dados?.usuarios || []
+  const totalGeral = dados?.totalGeral || 0
+
+  return (
+    <section className="card-premium overflow-hidden rounded-[28px] p-0">
+      <div className="border-b border-[#1C2A24] p-4">
+        <p className="text-xs font-black uppercase tracking-[0.22em] text-[#3AF2A1]">
+          Participação
+        </p>
+
+        <h2 className="mt-1 text-lg font-black text-[#F4FFF8]">
+          Gastos por pessoa
+        </h2>
+
+        <div className="mt-4 grid grid-cols-3 gap-2">
+          <IndicadorUsuario titulo="Total Geral" valor={totalGeral} />
+
+          {usuarios.map((usuario) => (
+            <IndicadorUsuario
+              key={usuario.nome}
+              titulo={usuario.nome}
+              valor={usuario.total}
+              subtitulo={`${formatarPercentual(usuario.percentualTotal)} do total`}
+            />
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-4 p-4">
+        {usuarios.map((usuario) => (
+          <BarraUsuarioFinanceiro key={usuario.nome} usuario={usuario} />
+        ))}
+      </div>
+    </section>
+  )
+}
+
+function IndicadorUsuario({ titulo, valor, subtitulo }) {
+  return (
+    <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3">
+      <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-[#91A99C]">
+        {titulo}
+      </p>
+
+      <p className="mt-1 truncate text-sm font-black text-[#F4FFF8]">
+        {formatarMoeda(valor)}
+      </p>
+
+      {subtitulo && (
+        <p className="mt-0.5 truncate text-[10px] font-semibold text-[#3AF2A1]">
+          {subtitulo}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function BarraUsuarioFinanceiro({ usuario }) {
+  const total = usuario.total || 0
+  const aberto = usuario.aberto || 0
+  const pago = usuario.pago || 0
+
+  return (
+    <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-black text-[#F4FFF8]">
+            {usuario.nome}
+          </p>
+
+          <p className="mt-0.5 text-[11px] font-semibold text-[#91A99C]">
+            Total: {formatarMoeda(total)}
+          </p>
+        </div>
+
+        <p className="text-xs font-black text-[#3AF2A1]">
+          {formatarPercentual(usuario.percentualTotal)}
+        </p>
+      </div>
+
+      <div className="flex h-9 overflow-hidden rounded-2xl bg-[#102018]">
+        <div
+          className="flex items-center justify-center bg-yellow-500/90 px-2 text-[10px] font-black text-black transition-all"
+          style={{ width: `${Math.max(usuario.percentualAberto, aberto > 0 ? 8 : 0)}%` }}
+        >
+          {aberto > 0 && `${formatarMoeda(aberto)} · ${formatarPercentual(usuario.percentualAberto)}`}
+        </div>
+
+        <div
+          className="flex items-center justify-center bg-[#3AF2A1] px-2 text-[10px] font-black text-[#021A10] transition-all"
+          style={{ width: `${Math.max(usuario.percentualPago, pago > 0 ? 8 : 0)}%` }}
+        >
+          {pago > 0 && `${formatarMoeda(pago)} · ${formatarPercentual(usuario.percentualPago)}`}
+        </div>
+      </div>
+
+      <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
+        <p className="text-yellow-300">
+          Em aberto: {formatarMoeda(aberto)}
+        </p>
+
+        <p className="text-right text-[#3AF2A1]">
+          Pago: {formatarMoeda(pago)}
+        </p>
+      </div>
     </div>
   )
 }
