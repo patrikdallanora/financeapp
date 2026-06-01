@@ -615,17 +615,17 @@ function CardParticipacaoUsuarios({ dados }) {
 
 function IndicadorUsuario({ titulo, valor, subtitulo }) {
   return (
-    <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3">
-      <p className="truncate text-[10px] font-black uppercase tracking-[0.16em] text-[#91A99C]">
+    <div className="min-w-0 rounded-[22px] border border-[#1C2A24] bg-[#030504]/70 px-2.5 py-3">
+      <p className="truncate text-[10px] font-semibold text-[#91A99C]">
         {titulo}
       </p>
 
-      <p className="mt-1 truncate text-sm font-black text-[#F4FFF8]">
+      <p className="mt-1 truncate text-[13px] font-black leading-4 text-[#F4FFF8]">
         {formatarMoeda(valor)}
       </p>
 
       {subtitulo && (
-        <p className="mt-0.5 truncate text-[10px] font-semibold text-[#3AF2A1]">
+        <p className="mt-1 truncate text-[9.5px] font-semibold leading-3 text-[#3AF2A1]">
           {subtitulo}
         </p>
       )}
