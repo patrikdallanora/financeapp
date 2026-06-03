@@ -384,33 +384,33 @@ const subcategoria = subcategorias?.find(
   }
 
   const salvarParcelado = async () => {
-    const base = montarLancamentoBase()
-    const parcelamentoId = gerarUUID()
-    const atual = Number(parcelaAtual)
-    const total = Number(totalParcelas)
+  const base = montarLancamentoBase()
+  const parcelamentoId = gerarUUID()
+  const atual = Number(parcelaAtual)
+  const total = Number(totalParcelas)
 
-    for (let parcela = 1; parcela <= total; parcela++) {
-      const offset = parcela - atual
-      const pagoRetroativo = parcela < atual
+  for (let parcela = 1; parcela <= total; parcela++) {
+    const offset = parcela - atual
+    const pagoRetroativo = parcela < atual
 
-      await db.lancamentos.add({
-        ...criarRegistroBase(),
-        ...base,
-        status: pagoRetroativo ? 'pago' : 'pendente',
-        dataPagamento: pagoRetroativo ? adicionarMeses(dataCompetencia, offset) : null,
-        dataCompetencia: adicionarMeses(dataCompetencia, offset),
-        faturaRef:
-          metodoPagamento === 'cartao'
-            ? adicionarMesesFatura(faturaSelecionada, parcela - 1)
-            : null,
-        parcelaAtual: parcela,
-        totalParcelas: total,
-        parcelamentoId,
-        recorrente: false,
-        recorrenciaId: null
-      })
-    }
+    await db.lancamentos.add({
+      ...criarRegistroBase(),
+      ...base,
+      status: pagoRetroativo ? 'pago' : 'pendente',
+      dataPagamento: pagoRetroativo ? adicionarMeses(dataCompetencia, offset) : null,
+      dataCompetencia: adicionarMeses(dataCompetencia, offset),
+      faturaRef:
+        metodoPagamento === 'cartao'
+          ? adicionarMesesFatura(faturaSelecionada, offset)
+          : null,
+      parcelaAtual: parcela,
+      totalParcelas: total,
+      parcelamentoId,
+      recorrente: false,
+      recorrenciaId: null
+    })
   }
+}
 
   const salvarFixaMensal = async () => {
     const base = montarLancamentoBase()

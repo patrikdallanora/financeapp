@@ -1292,13 +1292,35 @@ function CardExtrato({
   }
 
   const excluir = async () => {
-    const confirmar = confirm(`Excluir "${lancamento.descricao}"?`)
+  if (lancamento.parcelamentoId) {
+    const excluirTodos = confirm(
+      `Este lançamento faz parte de uma compra parcelada. Deseja excluir todas as parcelas de "${lancamento.descricao}"?`
+    )
 
-    if (!confirmar) return
+    if (excluirTodos) {
+      const relacionados = await db.lancamentos
+        .where('parcelamentoId')
+        .equals(lancamento.parcelamentoId)
+        .toArray()
 
-    await softDelete('lancamentos', lancamento.id)
-    agendarSync()
+      for (const item of relacionados) {
+        if (!item.deletedAt) {
+          await softDelete('lancamentos', item.id)
+        }
+      }
+
+      agendarSync()
+      return
+    }
   }
+
+  const confirmar = confirm(`Excluir apenas este lançamento "${lancamento.descricao}"?`)
+
+  if (!confirmar) return
+
+  await softDelete('lancamentos', lancamento.id)
+  agendarSync()
+}
 
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
