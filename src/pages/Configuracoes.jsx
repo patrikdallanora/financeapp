@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react'
+import {
+  ativarNotificacoes,
+  enviarNotificacaoTeste,
+  obterStatusNotificacoes
+} from '../services/notificacoes'
 import { Wifi, WifiOff, CheckCircle2, AlertTriangle, RefreshCw } from 'lucide-react'
 
 import { CardPremium } from '../components/CardPremium'
@@ -19,6 +24,13 @@ const formatarDataHora = (dataISO) => {
 export default function Configuracoes() {
   const [statusSync, setStatusSync] = useState(obterStatusSync())
   const [restaurando, setRestaurando] = useState(false)
+
+  const [statusNotificacoes, setStatusNotificacoes] = useState(
+  obterStatusNotificacoes()
+)
+
+const [ativandoNotificacoes, setAtivandoNotificacoes] = useState(false)
+const [enviandoTeste, setEnviandoTeste] = useState(false)
 
   useEffect(() => {
     const atualizar = () => {
@@ -58,6 +70,36 @@ export default function Configuracoes() {
       setRestaurando(false)
     }
   }
+
+  const habilitarNotificacoes = async () => {
+  try {
+    setAtivandoNotificacoes(true)
+
+    await ativarNotificacoes()
+
+    setStatusNotificacoes(obterStatusNotificacoes())
+
+    alert('Notificações ativadas com sucesso.')
+  } catch (err) {
+    alert(err.message)
+  } finally {
+    setAtivandoNotificacoes(false)
+  }
+}
+
+const testarNotificacao = async () => {
+  try {
+    setEnviandoTeste(true)
+
+    await enviarNotificacaoTeste()
+
+    alert('Notificação enviada.')
+  } catch (err) {
+    alert(err.message)
+  } finally {
+    setEnviandoTeste(false)
+  }
+}
 
   const online = navigator.onLine && statusSync.online !== false
 
@@ -134,6 +176,84 @@ export default function Configuracoes() {
           {import.meta.env.VITE_SHEETS_API_URL || 'URL não configurada'}
         </p>
       </CardPremium>
+
+      <CardPremium>
+  <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+    <div>
+      <p className="text-xs font-black uppercase tracking-[0.18em] text-[#3AF2A1]">
+        Notificações
+      </p>
+
+      <h3 className="mt-1 text-base font-black text-[#F4FFF8]">
+        Push Notifications
+      </h3>
+
+      <p className="mt-2 text-sm leading-5 text-[#C7D2CC]">
+        Receba alertas de despesas vencidas, vencimentos próximos,
+        metas estouradas e problemas de sincronização.
+      </p>
+
+      <p className="mt-3 text-xs font-semibold text-[#91A99C]">
+        Status:{' '}
+        {statusNotificacoes.ativo
+          ? 'Ativadas'
+          : 'Desativadas'}
+      </p>
+    </div>
+
+    <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-col">
+      <button
+        onClick={habilitarNotificacoes}
+        disabled={
+          ativandoNotificacoes ||
+          statusNotificacoes.ativo
+        }
+        className="
+          rounded-2xl
+          border
+          border-[#3AF2A1]/30
+          bg-[#3AF2A1]/10
+          px-4
+          py-3
+          text-sm
+          font-black
+          text-[#3AF2A1]
+          disabled:opacity-50
+        "
+      >
+        {ativandoNotificacoes
+          ? 'Ativando...'
+          : statusNotificacoes.ativo
+          ? 'Ativadas'
+          : 'Ativar'}
+      </button>
+
+      <button
+        onClick={testarNotificacao}
+        disabled={
+          enviandoTeste ||
+          !statusNotificacoes.ativo
+        }
+        className="
+          rounded-2xl
+          border
+          border-[#1C2A24]
+          bg-[#030504]/70
+          px-4
+          py-3
+          text-sm
+          font-black
+          text-[#F4FFF8]
+          disabled:opacity-50
+        "
+      >
+        {enviandoTeste
+          ? 'Enviando...'
+          : 'Enviar teste'}
+      </button>
+    </div>
+  </div>
+</CardPremium>
 
       <CardPremium className="rounded-[28px] border border-[#4A1D1D] bg-[#190606] p-4">
         <div className="flex items-start justify-between gap-3">
