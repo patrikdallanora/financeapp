@@ -1,4 +1,4 @@
-const webPush = require('web-push')
+import webPush from 'web-push'
 
 const API_URL = process.env.VITE_SHEETS_API_URL
 const API_SECRET = process.env.VITE_API_SECRET
@@ -231,7 +231,7 @@ const enviarPush = async (subscription, payload) => {
   )
 }
 
-module.exports = async function handler(req, res) {
+export default async function handler(req, res) {
   try {
     if (!API_URL || !API_SECRET) {
       return res.status(500).json({
