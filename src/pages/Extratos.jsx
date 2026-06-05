@@ -478,16 +478,23 @@ const subcategoriasFiltradas = useMemo(() => {
     )
 
     for (const lancamento of itensCartao) {
-      const cartaoId = lancamento.cartaoUuid || lancamento.cartaoId || 'sem-cartao'
-      const faturaRef = lancamento.faturaRef || mesAtual
-      const chave = `${cartaoId}-${faturaRef}`
+      const cartaoChave =
+  lancamento.cartao?.uuid ||
+  lancamento.cartaoUuid ||
+  lancamento.cartao?.id ||
+  lancamento.cartaoId ||
+  'sem-cartao'
+
+const faturaRef = lancamento.faturaRef || mesAtual
+const chave = `${cartaoChave}-${faturaRef}`
 
       if (!mapa.has(chave)) {
         mapa.set(chave, {
           id: chave,
-          cartaoId,
-          faturaRef,
-          cartao: lancamento.cartao,
+cartaoId: lancamento.cartao?.id || lancamento.cartaoId || null,
+cartaoUuid: lancamento.cartao?.uuid || lancamento.cartaoUuid || null,
+faturaRef,
+cartao: lancamento.cartao,
           itens: [],
           total: 0,
           valorPago: 0,
