@@ -1,4 +1,4 @@
-import webPush from 'web-push'
+const webPush = require('web-push')
 
 const API_URL = process.env.VITE_SHEETS_API_URL
 const API_SECRET = process.env.VITE_API_SECRET
@@ -35,7 +35,7 @@ const buscarSubscriptions = async () => {
   return dados.subscriptions || []
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     const subscriptions = await buscarSubscriptions()
 

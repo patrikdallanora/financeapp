@@ -1,4 +1,4 @@
-import webPush from 'web-push'
+const webPush = require('web-push')
 
 const API_URL = process.env.VITE_SHEETS_API_URL
 const API_SECRET = process.env.VITE_API_SECRET
@@ -14,7 +14,9 @@ webPush.setVapidDetails(
 
 const hojeISO = () => {
   const agora = new Date()
-  const brasil = new Date(agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' }))
+  const brasil = new Date(
+    agora.toLocaleString('en-US', { timeZone: 'America/Sao_Paulo' })
+  )
 
   return brasil.toISOString().slice(0, 10)
 }
@@ -217,21 +219,19 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
 }
 
 const enviarPush = async (subscription, payload) => {
-  const pushSubscription = {
-    endpoint: subscription.endpoint,
-    keys: {
-      p256dh: subscription.keys?.p256dh,
-      auth: subscription.keys?.auth
-    }
-  }
-
   return webPush.sendNotification(
-    pushSubscription,
+    {
+      endpoint: subscription.endpoint,
+      keys: {
+        p256dh: subscription.keys?.p256dh,
+        auth: subscription.keys?.auth
+      }
+    },
     JSON.stringify(payload)
   )
 }
 
-export default async function handler(req, res) {
+module.exports = async function handler(req, res) {
   try {
     if (!API_URL || !API_SECRET) {
       return res.status(500).json({
