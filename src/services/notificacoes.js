@@ -103,11 +103,13 @@ export const ativarNotificacoes = async () => {
   })
 
   const texto = await resposta.text()
-  const dados = texto ? JSON.parse(texto) : {}
+const dados = texto ? JSON.parse(texto) : {}
 
-  if (!resposta.ok || dados.erro) {
-    throw new Error(dados.erro || 'Erro ao salvar inscrição de notificação.')
-  }
+if (!resposta.ok || dados.erro) {
+  throw new Error(
+    `Erro ao salvar inscrição: ${JSON.stringify(dados)}`
+  )
+}
 
   localStorage.setItem(CHAVE_NOTIFICACOES_ATIVAS, 'true')
 
