@@ -508,10 +508,13 @@ const subcategoriasFiltradas = useMemo(() => {
       const fechadaPorValor = valorPago >= fatura.total && fatura.total > 0
       const fechada = fechadaPorCampo || fechadaPorValor
 
+      const dataVencimento = obterDataVencimentoFatura(fatura.cartao, fatura.faturaRef)
+
       return {
         ...fatura,
         valorPago,
         fechada,
+        dataVencimento,
         vencida: faturaEstaVencida(fatura.cartao, fatura.faturaRef, fechada)
       }
     })
@@ -524,25 +527,63 @@ const subcategoriasFiltradas = useMemo(() => {
     })
   }, [lancamentosFiltrados, mesAtual])
 
-  const gruposNaoCartao = useMemo(() => {
-    const mapa = new Map()
+  const timelineExtrato = useMemo(() => {
+    const itens = []
+
+    for (const fatura of faturasCartao) {
+      const dataVencimento =
+        fatura.dataVencimento ||
+        obterDataVencimentoFatura(fatura.cartao, fatura.faturaRef) ||
+        `${fatura.faturaRef || mesAtual}-01`
+
+      itens.push({
+        id: `fatura-${fatura.id}`,
+        tipo: 'fatura',
+        data: dataVencimento,
+        fatura
+      })
+    }
 
     const itensNaoCartao = lancamentosFiltrados.filter(
       (lancamento) => lancamento.metodoPagamento !== 'cartao'
     )
 
     for (const lancamento of itensNaoCartao) {
-      const data = normalizarDataCivil(lancamento.dataCompetencia) || 'Sem data'
+      itens.push({
+        id: `lancamento-${lancamento.id}`,
+        tipo: 'lancamento',
+        data: normalizarDataCivil(lancamento.dataCompetencia) || 'Sem data',
+        lancamento
+      })
+    }
 
-      if (!mapa.has(data)) {
-        mapa.set(data, [])
+    itens.sort((a, b) => {
+      const comparacaoData = String(b.data || '').localeCompare(String(a.data || ''))
+
+      if (comparacaoData !== 0) return comparacaoData
+
+      if (a.tipo === b.tipo) {
+        const descricaoA = a.lancamento?.descricao || a.fatura?.cartao?.nome || ''
+        const descricaoB = b.lancamento?.descricao || b.fatura?.cartao?.nome || ''
+
+        return descricaoA.localeCompare(descricaoB)
       }
 
-      mapa.get(data).push(lancamento)
+      return a.tipo === 'fatura' ? -1 : 1
+    })
+
+    const mapa = new Map()
+
+    for (const item of itens) {
+      if (!mapa.has(item.data)) {
+        mapa.set(item.data, [])
+      }
+
+      mapa.get(item.data).push(item)
     }
 
     return Array.from(mapa.entries())
-  }, [lancamentosFiltrados])
+  }, [faturasCartao, lancamentosFiltrados, mesAtual])
 
   const limparFiltroCategoria = () => {
     setFiltro('todos')
@@ -1013,40 +1054,7 @@ alteracoes = {
       </CardPremium>
 
       <section className="space-y-3">
-        {faturasCartao.length > 0 && (
-          <div className="space-y-1.5">
-            <div className="flex items-end justify-between px-2">
-              <p className="text-xl font-black leading-6 tracking-tight text-[#F4FFF8]">
-                Faturas
-              </p>
-
-              <p className="text-sm font-semibold text-[#3AF2A1]">
-                {faturasCartao.length} {faturasCartao.length === 1 ? 'fatura' : 'faturas'}
-              </p>
-            </div>
-
-            <div className="space-y-3">
-              {faturasCartao.map((fatura) => (
-                <CardFatura
-                  key={fatura.id}
-                  fatura={fatura}
-                  expandida={faturaExpandidaId === fatura.id}
-                  onAlternarPagamento={() => abrirPagamentoFatura(fatura)}
-                  onAlternarExpansao={() =>
-                    setFaturaExpandidaId((atual) => (atual === fatura.id ? null : fatura.id))
-                  }
-                  onEditarDescricao={abrirEditorDescricao}
-                  onEditarValor={abrirEditorValor}
-                  onEditarCategoria={abrirEditorCategoria}
-                  expandidoId={expandidoId}
-                  setExpandidoId={setExpandidoId}
-                />
-              ))}
-            </div>
-          </div>
-        )}
-
-        {gruposNaoCartao.map(([data, itens]) => (
+        {timelineExtrato.map(([data, itens]) => (
           <div key={data} className="space-y-1.5">
             <div className="flex items-end justify-between px-2">
               <p className="text-xl font-black leading-6 tracking-tight text-[#F4FFF8]">
@@ -1054,22 +1062,52 @@ alteracoes = {
               </p>
 
               <p className="text-sm font-semibold text-[#3AF2A1]">
-                {itens.length} {itens.length === 1 ? 'lançamento' : 'lançamentos'}
+                {itens.length} {itens.length === 1 ? 'item' : 'itens'}
               </p>
             </div>
 
-            <GrupoExtratos
-              itens={itens}
-              expandidoId={expandidoId}
-              setExpandidoId={setExpandidoId}
-              onEditarDescricao={abrirEditorDescricao}
-              onEditarValor={abrirEditorValor}
-              onEditarCategoria={abrirEditorCategoria}
-            />
+            <div className="space-y-3">
+              {itens.map((item) => {
+                if (item.tipo === 'fatura') {
+                  const fatura = item.fatura
+
+                  return (
+                    <CardFatura
+                      key={item.id}
+                      fatura={fatura}
+                      expandida={faturaExpandidaId === fatura.id}
+                      onAlternarPagamento={() => abrirPagamentoFatura(fatura)}
+                      onAlternarExpansao={() =>
+                        setFaturaExpandidaId((atual) => (atual === fatura.id ? null : fatura.id))
+                      }
+                      onEditarDescricao={abrirEditorDescricao}
+                      onEditarValor={abrirEditorValor}
+                      onEditarCategoria={abrirEditorCategoria}
+                      expandidoId={expandidoId}
+                      setExpandidoId={setExpandidoId}
+                    />
+                  )
+                }
+
+                return (
+                  <CardExtrato
+                    key={item.id}
+                    lancamento={item.lancamento}
+                    expandido={expandidoId === item.lancamento.id}
+                    onToggle={() =>
+                      setExpandidoId((atual) => (atual === item.lancamento.id ? null : item.lancamento.id))
+                    }
+                    onEditarDescricao={abrirEditorDescricao}
+                    onEditarValor={abrirEditorValor}
+                    onEditarCategoria={abrirEditorCategoria}
+                  />
+                )
+              })}
+            </div>
           </div>
         ))}
 
-        {faturasCartao.length === 0 && gruposNaoCartao.length === 0 && (
+        {timelineExtrato.length === 0 && (
           <CardPremium>
             <p className="text-sm font-semibold text-[#91A99C]">
               Nenhum lançamento encontrado para os filtros selecionados.
