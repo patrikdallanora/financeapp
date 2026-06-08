@@ -77,11 +77,14 @@ export const ativarNotificacoes = async () => {
 
   const registration = await navigator.serviceWorker.ready
 
-  const subscriptionExistente = await registration.pushManager.getSubscription()
+  let subscription = await registration.pushManager.getSubscription()
 
-  if (subscriptionExistente) {
-    await subscriptionExistente.unsubscribe()
-  }
+if (!subscription) {
+  subscription = await registration.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: converterBase64ParaUint8Array(VAPID_PUBLIC_KEY)
+  })
+}
 
   const subscription = await registration.pushManager.subscribe({
     userVisibleOnly: true,
