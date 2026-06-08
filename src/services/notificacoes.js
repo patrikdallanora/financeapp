@@ -86,11 +86,6 @@ if (!subscription) {
   })
 }
 
-  const subscription = await registration.pushManager.subscribe({
-    userVisibleOnly: true,
-    applicationServerKey: converterBase64ParaUint8Array(VAPID_PUBLIC_KEY)
-  })
-
   const resposta = await fetch(API_URL, {
     method: 'POST',
     headers: {
@@ -106,7 +101,7 @@ if (!subscription) {
   })
 
   const texto = await resposta.text()
-const dados = texto ? JSON.parse(texto) : {}
+  const dados = texto ? JSON.parse(texto) : {}
 
 if (!resposta.ok || dados.erro) {
   throw new Error(
