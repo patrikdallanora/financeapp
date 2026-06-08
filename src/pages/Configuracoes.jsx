@@ -204,10 +204,7 @@ const testarNotificacao = async () => {
     <div className="grid grid-cols-2 gap-2 sm:flex sm:flex-col">
       <button
         onClick={habilitarNotificacoes}
-        disabled={
-          ativandoNotificacoes ||
-          statusNotificacoes.ativo
-        }
+        disabled={ativandoNotificacoes}
         className="
           rounded-2xl
           border
@@ -222,10 +219,10 @@ const testarNotificacao = async () => {
         "
       >
         {ativandoNotificacoes
-          ? 'Ativando...'
-          : statusNotificacoes.ativo
-          ? 'Ativadas'
-          : 'Ativar'}
+  ? 'Atualizando...'
+  : statusNotificacoes.ativo
+  ? 'Atualizar'
+  : 'Ativar'}
       </button>
 
       <button
