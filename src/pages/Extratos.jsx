@@ -1337,41 +1337,41 @@ function CardExtrato({
   }
 
   const excluir = async () => {
-  if (lancamento.parcelamentoId) {
-    const excluirTodos = confirm(
-      `Este lançamento faz parte de uma compra parcelada. Deseja excluir todas as parcelas de "${lancamento.descricao}"?`
-    )
+    if (lancamento.parcelamentoId) {
+      const excluirTodos = confirm(
+        `Este lançamento faz parte de uma compra parcelada. Deseja excluir todas as parcelas de "${lancamento.descricao}"?`
+      )
 
-    if (excluirTodos) {
-      const relacionados = await db.lancamentos
-        .where('parcelamentoId')
-        .equals(lancamento.parcelamentoId)
-        .toArray()
+      if (excluirTodos) {
+        const relacionados = await db.lancamentos
+          .where('parcelamentoId')
+          .equals(lancamento.parcelamentoId)
+          .toArray()
 
-      for (const item of relacionados) {
-        if (!item.deletedAt) {
-          await softDelete('lancamentos', item.id)
+        for (const item of relacionados) {
+          if (!item.deletedAt) {
+            await softDelete('lancamentos', item.id)
+          }
         }
+
+        agendarSync()
+        return
       }
-
-      agendarSync()
-      return
     }
+
+    const confirmar = confirm(`Excluir apenas este lançamento "${lancamento.descricao}"?`)
+
+    if (!confirmar) return
+
+    await softDelete('lancamentos', lancamento.id)
+    agendarSync()
   }
-
-  const confirmar = confirm(`Excluir apenas este lançamento "${lancamento.descricao}"?`)
-
-  if (!confirmar) return
-
-  await softDelete('lancamentos', lancamento.id)
-  agendarSync()
-}
 
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       <button
         onClick={onToggle}
-        className="grid min-h-[14px] w-full grid-cols-[54px_minmax(0,1fr)_auto_14px] items-center gap-1 px-3 py-0.5 text-left active:scale-[0.995]"
+        className="grid min-h-[64px] w-full grid-cols-[54px_minmax(0,1fr)_18px] items-center gap-2 px-3 py-2 text-left active:scale-[0.995]"
       >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
           <div className="origin-center scale-[0.90]">
@@ -1383,62 +1383,52 @@ function CardExtrato({
           </div>
         </div>
 
-        <div className="min-w-0 overflow-hidden">
+        <div className="min-w-0">
           <button
             type="button"
             onClick={(event) => {
               event.stopPropagation()
               onEditarDescricao(lancamento)
             }}
-            className="block max-w-full truncate text-left text-[12.5px] font-black leading-[14px] text-[#F4FFF8]"
+            className="block w-full truncate text-left text-[12.5px] font-black leading-[16px] text-[#F4FFF8]"
           >
             {lancamento.descricao}
             {lancamento.parcelaAtual && lancamento.totalParcelas
-              ? ` · ${lancamento.parcelaAtual}/${lancamento.totalParcelas}`
+              ? ` ${lancamento.parcelaAtual}/${lancamento.totalParcelas}`
               : ''}
             {lancamento.recorrente ? ' · Fixa mensal' : ''}
           </button>
 
-          <button
-            type="button"
-            onClick={(event) => {
-              event.stopPropagation()
-              onEditarCategoria(lancamento)
-            }}
-            className="mt-[1px] block max-w-full truncate text-left text-[10.5px] leading-[12px] text-[#B5CFC1]"
-          >
-            {lancamento.categoria?.nome || 'Sem categoria'}
-            {lancamento.subcategoria?.nome ? ` • ${lancamento.subcategoria.nome}` : ''}
-          </button>
+          <div className="mt-2 flex min-w-0 items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onEditarCategoria(lancamento)
+              }}
+              className="min-w-0 truncate text-left text-[10.5px] font-semibold leading-[13px] text-[#B5CFC1]"
+            >
+              {lancamento.categoria?.nome || 'Sem categoria'}
+              {lancamento.subcategoria?.nome ? ` • ${lancamento.subcategoria.nome}` : ''}
+            </button>
 
-          <p className="mt-[1px] truncate text-[10px] leading-[11px] text-[#91A99C]">
-            {formatarMetodo(lancamento.metodoPagamento)}
-            {lancamento.cartao ? ` • ${lancamento.cartao.nome}` : ''}
-          </p>
+            <button
+              type="button"
+              onClick={(event) => {
+                event.stopPropagation()
+                onEditarValor(lancamento)
+              }}
+              className="shrink-0 text-right"
+            >
+              <span className={`whitespace-nowrap text-[12px] font-black leading-[14px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
+                {positivo ? '+' : '-'} {formatarMoeda(lancamento.valor)}
+              </span>
+            </button>
+          </div>
         </div>
 
-        <button
-          type="button"
-          onClick={(event) => {
-            event.stopPropagation()
-            onEditarValor(lancamento)
-          }}
-          className="shrink-0 text-right"
-        >
-          <p className={`whitespace-nowrap text-[12.5px] font-black leading-[14px] ${positivo ? 'text-[#3AF2A1]' : 'text-red-300'}`}>
-            {positivo ? '+' : '-'} {formatarMoeda(lancamento.valor)}
-          </p>
-
-          <p className={`mt-[1px] text-[10px] font-semibold capitalize leading-[11px] ${
-            lancamento.status === 'pendente' ? 'text-yellow-400' : 'text-[#B5CFC1]'
-          }`}
-          >
-            {controlePorFatura ? 'na fatura' : lancamento.status}
-          </p>
-        </button>
-
         <ChevronDown
-          size={13}
+          size={14}
           className={`shrink-0 text-[#B5CFC1] transition ${expandido ? 'rotate-180' : ''}`}
         />
       </button>
