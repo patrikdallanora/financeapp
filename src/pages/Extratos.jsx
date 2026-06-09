@@ -565,7 +565,7 @@ cartao: lancamento.cartao,
     }
 
     itens.sort((a, b) => {
-      const comparacaoData = String(b.data || '').localeCompare(String(a.data || ''))
+      const comparacaoData = String(a.data || '').localeCompare(String(b.data || ''))
 
       if (comparacaoData !== 0) return comparacaoData
 

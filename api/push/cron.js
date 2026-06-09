@@ -103,7 +103,7 @@ const montarMapaCartoes = (cartoes) => {
 
 const calcularAlertas = ({ lancamentos, cartoes }) => {
   const hoje = hojeISO()
-  const amanha = adicionarDias(hoje, 1)
+  const limiteProximosDias = adicionarDias(hoje, 5)
   const mapaCartoes = montarMapaCartoes(cartoes)
 
   const despesasPendentes = lancamentos.filter((lancamento) => {
@@ -123,9 +123,11 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
     (lancamento) => String(lancamento.dataCompetencia || '') === hoje
   )
 
-  const vencendoAmanha = despesasPendentes.filter(
-    (lancamento) => String(lancamento.dataCompetencia || '') === amanha
-  )
+  const vencendoProximosDias = despesasPendentes.filter((lancamento) => {
+  const data = String(lancamento.dataCompetencia || '')
+
+  return data > hoje && data <= limiteProximosDias
+})
 
   const faturas = new Map()
 
@@ -167,6 +169,19 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
     return vencimento && vencimento < hoje
   })
 
+  const faturasVencendoProximosDias = Array.from(faturas.values()).filter((fatura) => {
+  const cartao =
+    mapaCartoes.get(String(fatura.cartaoUuid || '')) ||
+    mapaCartoes.get(String(fatura.cartaoId || ''))
+
+  const vencimento = montarDataVencimentoFatura(
+    fatura.faturaRef,
+    cartao?.diaVencimento
+  )
+
+  return vencimento && vencimento >= hoje && vencimento <= limiteProximosDias
+})
+
   const totalVencidas = vencidas.reduce(
     (total, item) => total + Number(item.valor || 0),
     0
@@ -177,15 +192,20 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
     0
   )
 
-  const totalAmanha = vencendoAmanha.reduce(
-    (total, item) => total + Number(item.valor || 0),
-    0
-  )
+  const totalProximosDias = vencendoProximosDias.reduce(
+  (total, item) => total + Number(item.valor || 0),
+  0
+)
 
   const totalFaturasVencidas = faturasVencidas.reduce(
     (total, item) => total + Number(item.total || 0),
     0
   )
+
+  const totalFaturasProximosDias = faturasVencendoProximosDias.reduce(
+  (total, item) => total + Number(item.total || 0),
+  0
+)
 
   const partes = []
 
@@ -197,13 +217,17 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
     partes.push(`${vencendoHoje.length} vencendo hoje: ${formatarMoeda(totalHoje)}`)
   }
 
-  if (vencendoAmanha.length > 0) {
-    partes.push(`${vencendoAmanha.length} vencendo amanhã: ${formatarMoeda(totalAmanha)}`)
-  }
+  if (vencendoProximosDias.length > 0) {
+  partes.push(`${vencendoProximosDias.length} vencendo nos próximos 5 dias: ${formatarMoeda(totalProximosDias)}`)
+}
 
   if (faturasVencidas.length > 0) {
     partes.push(`${faturasVencidas.length} fatura(s) vencida(s): ${formatarMoeda(totalFaturasVencidas)}`)
   }
+
+  if (faturasVencendoProximosDias.length > 0) {
+  partes.push(`${faturasVencendoProximosDias.length} fatura(s) vencendo nos próximos 5 dias: ${formatarMoeda(totalFaturasProximosDias)}`)
+}
 
   return {
     deveNotificar: partes.length > 0,
@@ -212,8 +236,9 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
     resumo: {
       vencidas: vencidas.length,
       vencendoHoje: vencendoHoje.length,
-      vencendoAmanha: vencendoAmanha.length,
-      faturasVencidas: faturasVencidas.length
+      vencendoProximosDias: vencendoProximosDias.length,
+      faturasVencidas: faturasVencidas.length,
+faturasVencendoProximosDias: faturasVencendoProximosDias.length
     }
   }
 }
