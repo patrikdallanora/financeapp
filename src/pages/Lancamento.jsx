@@ -613,20 +613,20 @@ const subcategoria = subcategorias?.find(
         {tipoLancamento === 'parcelado' && (
           <div className="grid grid-cols-2 gap-3">
             <CampoTexto
-              label="Parcela atual"
-              value={parcelaAtual}
-              onChange={(valorCampo) => setParcelaAtual(String(valorCampo).replace(/\D/g, '').slice(0, 2))}
-              placeholder="3"
-              inputMode="numeric"
-            />
+  label="Parcela atual"
+  value={parcelaAtual}
+  onChange={(valorCampo) => setParcelaAtual(String(valorCampo).replace(/\D/g, '').slice(0, 3))}
+  placeholder="3"
+  inputMode="numeric"
+/>
 
-            <CampoTexto
-              label="Total"
-              value={totalParcelas}
-              onChange={(valorCampo) => setTotalParcelas(String(valorCampo).replace(/\D/g, '').slice(0, 2))}
-              placeholder="6"
-              inputMode="numeric"
-            />
+<CampoTexto
+  label="Total"
+  value={totalParcelas}
+  onChange={(valorCampo) => setTotalParcelas(String(valorCampo).replace(/\D/g, '').slice(0, 3))}
+  placeholder="120"
+  inputMode="numeric"
+/>
           </div>
         )}
 
