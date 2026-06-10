@@ -1,4 +1,4 @@
-const CACHE_NAME = 'financeapp-v4'
+const CACHE_NAME = 'financeapp-v5'
 
 const ASSETS = [
   '/',
@@ -40,15 +40,31 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return
 
+  const url = new URL(event.request.url)
+
+  if (url.pathname.startsWith('/api/')) return
+
+  if (event.request.mode === 'navigate') {
+    event.respondWith(
+      fetch(event.request)
+        .then((response) => response)
+        .catch(() => caches.match('/index.html'))
+    )
+    return
+  }
+
   event.respondWith(
-    caches.match(event.request).then((response) => {
-      return (
-        response ||
-        fetch(event.request).catch(() =>
-          caches.match('/index.html')
-        )
-      )
-    })
+    fetch(event.request)
+      .then((response) => {
+        const respostaClone = response.clone()
+
+        caches.open(CACHE_NAME).then((cache) => {
+          cache.put(event.request, respostaClone)
+        })
+
+        return response
+      })
+      .catch(() => caches.match(event.request))
   )
 })
 
