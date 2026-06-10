@@ -1370,9 +1370,9 @@ function CardExtrato({
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       <button
-  onClick={onToggle}
-  className="relative grid min-h-[64px] w-full grid-cols-[54px_minmax(0,1fr)] items-center gap-2 px-3 py-2 text-left"
->
+        onClick={onToggle}
+        className="grid min-h-[64px] w-full grid-cols-[54px_minmax(0,1fr)_18px] items-center gap-2 px-3 py-2 text-left active:scale-[0.995]"
+      >
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden">
           <div className="origin-center scale-[0.90]">
             <IconeCategoria
