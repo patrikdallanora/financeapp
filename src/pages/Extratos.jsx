@@ -180,7 +180,7 @@ const faturaEstaVencida = (cartao, faturaRef, fechada) => {
 
   const hoje = new Date().toISOString().slice(0, 10)
 
-  return hoje > dataVencimento
+  return hoje >= dataVencimento
 }
 
 const OPCOES_FILTRO = [
@@ -1222,7 +1222,13 @@ function CardFatura({
           className={`flex h-9 w-9 items-center justify-center rounded-2xl border transition active:scale-95 ${corStatus}`}
           title={textoStatus}
         >
-          {fatura.fechada ? <CheckCircle2 size={18} /> : fatura.vencida ? <XCircle size={18} /> : <CreditCard size={18} />}
+          {fatura.fechada ? (
+  <CheckCircle2 size={18} />
+) : fatura.vencida ? (
+  <XCircle size={18} />
+) : (
+  <CreditCard size={18} />
+)}
         </button>
 
         <div className="min-w-0">
@@ -1323,6 +1329,17 @@ function CardExtrato({
 }) {
   const positivo = lancamento.tipo === 'receita'
 
+  const hoje = new Date().toISOString().slice(0, 10)
+const dataCompetencia = normalizarDataCivil(lancamento.dataCompetencia)
+const lancamentoPago = lancamento.status === 'pago'
+const lancamentoVencidoOuHoje = !lancamentoPago && dataCompetencia && dataCompetencia <= hoje
+
+const classeIconeLancamento = lancamentoPago
+  ? 'border-[#3AF2A1]/40 bg-[#3AF2A1]/10 text-[#3AF2A1]'
+  : lancamentoVencidoOuHoje
+    ? 'border-red-900/60 bg-red-950/30 text-red-300'
+    : ''
+
   const alternarStatus = async () => {
     const novoStatus = lancamento.status === 'pago' ? 'pendente' : 'pago'
 
@@ -1373,15 +1390,21 @@ function CardExtrato({
         onClick={onToggle}
         className="grid min-h-[44px] w-full grid-cols-[54px_minmax(0,1fr)_18px] items-center gap-2 px-3 py-0.5 text-left active:scale-[0.995]"
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden">
-          <div className="origin-center scale-[0.90]">
-            <IconeCategoria
-              icone={lancamento.categoria?.icone}
-              cor={lancamento.categoria?.cor}
-              tamanho="sm"
-            />
-          </div>
-        </div>
+        <div className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border ${classeIconeLancamento}`}>
+  {lancamentoPago ? (
+    <CheckCircle2 size={18} />
+  ) : lancamentoVencidoOuHoje ? (
+    <XCircle size={18} />
+  ) : (
+    <div className="origin-center scale-[0.90]">
+      <IconeCategoria
+        icone={lancamento.categoria?.icone}
+        cor={lancamento.categoria?.cor}
+        tamanho="sm"
+      />
+    </div>
+  )}
+</div>
 
         <div className="min-w-0">
           <button
