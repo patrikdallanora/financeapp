@@ -109,6 +109,10 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const [observacoes, setObservacoes] = useState('')
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
 
+  const [modalTipoAberto, setModalTipoAberto] = useState(false)
+  const [modalParcelamentoAberto, setModalParcelamentoAberto] = useState(false)
+  const [modoValorParcelado, setModoValorParcelado] = useState('total')
+
   const usuarios = useLiveQuery(async () => {
     return await db.usuarios.toArray()
   }, [])
@@ -182,6 +186,43 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const usuarioSelecionado = usuarioId || usuarioPadrao?.id || ''
   const lancamentoCartao = metodoPagamento === 'cartao'
   const mostrarStatus = !lancamentoCartao || faturaEhAnterior(faturaSelecionada)
+
+const valorNumerico = moedaParaNumero(valor)
+const totalParcelasNumero = Math.max(Number(totalParcelas || 0), 0)
+
+const valorParcelaPreview = useMemo(() => {
+  if (tipoLancamento !== 'parcelado') return 0
+  if (!valorNumerico || !totalParcelasNumero) return 0
+
+  if (modoValorParcelado === 'parcela') {
+    return valorNumerico
+  }
+
+  return Math.ceil((valorNumerico * 100) / totalParcelasNumero) / 100
+}, [tipoLancamento, valorNumerico, totalParcelasNumero, modoValorParcelado])
+
+const resumoTipoLancamento = useMemo(() => {
+  if (tipoLancamento === 'simples') {
+    return {
+      titulo: 'Não recorrente',
+      detalhe: ''
+    }
+  }
+
+  if (tipoLancamento === 'fixa_mensal') {
+    return {
+      titulo: 'Fixa mensal',
+      detalhe: 'Será repetido mensalmente por 12 meses'
+    }
+  }
+
+  return {
+    titulo: 'Parcelada',
+    detalhe: totalParcelasNumero > 0
+      ? `Em ${totalParcelasNumero}x de ${formatarCampoMoeda(String(Math.round(valorParcelaPreview * 100)))}`
+      : 'Configure a quantidade de parcelas'
+  }
+}, [tipoLancamento, totalParcelasNumero, valorParcelaPreview])
 
   const sugestoesBase = useMemo(() => {
     if (!lancamentos || !categorias || !subcategorias) return []
@@ -389,13 +430,24 @@ const subcategoria = subcategorias?.find(
   const atual = Number(parcelaAtual)
   const total = Number(totalParcelas)
 
+  const valorInformado = moedaParaNumero(valor)
+  const valorTotalCentavos =
+    modoValorParcelado === 'parcela'
+      ? Math.round(valorInformado * 100) * total
+      : Math.round(valorInformado * 100)
+
+  const valorBaseCentavos = Math.floor(valorTotalCentavos / total)
+  const restoCentavos = valorTotalCentavos % total
+
   for (let parcela = 1; parcela <= total; parcela++) {
     const offset = parcela - atual
     const pagoRetroativo = parcela < atual
+    const valorParcelaCentavos = valorBaseCentavos + (parcela <= restoCentavos ? 1 : 0)
 
     await db.lancamentos.add({
       ...criarRegistroBase(),
       ...base,
+      valor: valorParcelaCentavos / 100,
       status: pagoRetroativo ? 'pago' : 'pendente',
       dataPagamento: pagoRetroativo ? adicionarMeses(dataCompetencia, offset) : null,
       dataCompetencia: adicionarMeses(dataCompetencia, offset),
@@ -485,15 +537,7 @@ const subcategoria = subcategorias?.find(
       />
 
       <CardPremium className="space-y-4">
-        <FiltroSegmentado
-          valor={tipoLancamento}
-          onChange={setTipoLancamento}
-          opcoes={[
-            { valor: 'simples', label: 'Normal' },
-            { valor: 'parcelado', label: 'Parcelado' },
-            { valor: 'fixa_mensal', label: 'Fixa mensal' }
-          ]}
-        />
+        
 
         <label className="block">
           <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
@@ -529,6 +573,22 @@ const subcategoria = subcategorias?.find(
           type="text"
           inputMode="numeric"
         />
+
+         <SeletorTipoLancamento
+  resumo={resumoTipoLancamento}
+  onAbrir={() => setModalTipoAberto(true)}
+/>
+
+{tipoLancamento === 'parcelado' && (
+  <FiltroSegmentado
+    valor={modoValorParcelado}
+    onChange={setModoValorParcelado}
+    opcoes={[
+      { valor: 'total', label: 'Valor total' },
+      { valor: 'parcela', label: 'Valor parcela' }
+    ]}
+  />
+)}   
 
         {lancamentoCartao && (
           <>
@@ -610,25 +670,7 @@ const subcategoria = subcategorias?.find(
           </select>
         </label>
 
-        {tipoLancamento === 'parcelado' && (
-          <div className="grid grid-cols-2 gap-3">
-            <CampoTexto
-  label="Parcela atual"
-  value={parcelaAtual}
-  onChange={(valorCampo) => setParcelaAtual(String(valorCampo).replace(/\D/g, '').slice(0, 3))}
-  placeholder="3"
-  inputMode="numeric"
-/>
-
-<CampoTexto
-  label="Total"
-  value={totalParcelas}
-  onChange={(valorCampo) => setTotalParcelas(String(valorCampo).replace(/\D/g, '').slice(0, 3))}
-  placeholder="120"
-  inputMode="numeric"
-/>
-          </div>
-        )}
+        
 
         {mostrarStatus && (
           <FiltroSegmentado
@@ -654,13 +696,38 @@ const subcategoria = subcategorias?.find(
           />
         </label>
 
-        <Botao onClick={salvar}>
+                <Botao onClick={salvar}>
           <span className="inline-flex items-center justify-center gap-2">
             <Save size={18} />
             Salvar lançamento
           </span>
         </Botao>
       </CardPremium>
+
+      {modalTipoAberto && (
+        <ModalTipoLancamento
+          tipoLancamento={tipoLancamento}
+          onSelecionar={(tipoSelecionado) => {
+            setTipoLancamento(tipoSelecionado)
+            setModalTipoAberto(false)
+
+            if (tipoSelecionado === 'parcelado') {
+              setModalParcelamentoAberto(true)
+            }
+          }}
+          onFechar={() => setModalTipoAberto(false)}
+        />
+      )}
+
+      {modalParcelamentoAberto && (
+        <ModalParcelamento
+          parcelaAtual={parcelaAtual}
+          totalParcelas={totalParcelas}
+          setParcelaAtual={setParcelaAtual}
+          setTotalParcelas={setTotalParcelas}
+          onFechar={() => setModalParcelamentoAberto(false)}
+        />
+      )}
     </div>
   )
 }
@@ -881,6 +948,175 @@ function SeletorCategoria({ categorias, categoriaSelecionada, onSelecionar }) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+function SeletorTipoLancamento({ resumo, onAbrir }) {
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      className="flex min-h-[58px] w-full items-center justify-between gap-3 rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-left active:scale-[0.99]"
+    >
+      <div>
+        <p className="text-sm font-black text-[#F4FFF8]">
+          {resumo.titulo}
+        </p>
+
+        {resumo.detalhe && (
+          <p className="mt-1 text-xs font-semibold text-[#91A99C]">
+            {resumo.detalhe}
+          </p>
+        )}
+      </div>
+
+      <ChevronDown size={18} className="shrink-0 text-[#91A99C]" />
+    </button>
+  )
+}
+
+function ModalTipoLancamento({ tipoLancamento, onSelecionar, onFechar }) {
+  const opcoes = [
+    { valor: 'simples', label: 'Não recorrente' },
+    { valor: 'parcelado', label: 'Parcelada' },
+    { valor: 'fixa_mensal', label: 'Fixa mensal' }
+  ]
+
+  return (
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C2A24] bg-[#111312] p-4 shadow-2xl">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-xl font-black text-[#F4FFF8]">
+            Tipo de lançamento
+          </h2>
+
+          <button
+            onClick={onFechar}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#91A99C]"
+          >
+            ×
+          </button>
+        </div>
+
+        <div className="space-y-2">
+          {opcoes.map((opcao) => (
+            <button
+              key={opcao.valor}
+              type="button"
+              onClick={() => onSelecionar(opcao.valor)}
+              className="flex min-h-[58px] w-full items-center gap-4 rounded-2xl px-3 text-left active:scale-[0.99]"
+            >
+              <span
+                className={`h-7 w-7 rounded-full border-4 ${
+                  tipoLancamento === opcao.valor
+                    ? 'border-[#3AF2A1] bg-[#3AF2A1]/20'
+                    : 'border-[#D8E6DE]'
+                }`}
+              />
+
+              <span className="text-lg font-semibold text-[#F4FFF8]">
+                {opcao.label}
+              </span>
+            </button>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModalParcelamento({
+  parcelaAtual,
+  totalParcelas,
+  setParcelaAtual,
+  setTotalParcelas,
+  onFechar
+}) {
+  const alterarNumero = (valor, delta, minimo) => {
+    return String(Math.max(Number(valor || minimo) + delta, minimo)).slice(0, 3)
+  }
+
+  return (
+    <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
+      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C2A24] bg-[#111312] p-4 shadow-2xl">
+        <div className="mb-4 flex items-center justify-between">
+          <button
+            onClick={onFechar}
+            className="flex h-10 w-10 items-center justify-center rounded-2xl text-3xl text-[#D8E6DE]"
+          >
+            ×
+          </button>
+
+          <h2 className="text-xl font-black text-[#F4FFF8]">
+            Configurar Repetição
+          </h2>
+
+          <button
+            onClick={onFechar}
+            className="rounded-2xl bg-[#60A5FA] px-4 py-2 text-sm font-black text-[#111312]"
+          >
+            Concluir
+          </button>
+        </div>
+
+        <div className="divide-y divide-[#1C2A24]">
+          <ControleNumero
+            titulo="Parcela inicial"
+            valor={parcelaAtual}
+            onMenos={() => setParcelaAtual(alterarNumero(parcelaAtual, -1, 1))}
+            onMais={() => setParcelaAtual(alterarNumero(parcelaAtual, 1, 1))}
+            onChange={(novoValor) =>
+              setParcelaAtual(String(novoValor).replace(/\D/g, '').slice(0, 3))
+            }
+          />
+
+          <ControleNumero
+            titulo="Quantidade"
+            valor={totalParcelas}
+            onMenos={() => setTotalParcelas(alterarNumero(totalParcelas, -1, 2))}
+            onMais={() => setTotalParcelas(alterarNumero(totalParcelas, 1, 2))}
+            onChange={(novoValor) =>
+              setTotalParcelas(String(novoValor).replace(/\D/g, '').slice(0, 3))
+            }
+          />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ControleNumero({ titulo, valor, onMenos, onMais, onChange }) {
+  return (
+    <div className="flex min-h-[78px] items-center justify-between gap-4 py-3">
+      <p className="text-lg font-semibold text-[#F4FFF8]">
+        {titulo}
+      </p>
+
+      <div className="flex items-center gap-4">
+        <button
+          type="button"
+          onClick={onMenos}
+          className="text-3xl font-black text-[#D8E6DE]"
+        >
+          ‹
+        </button>
+
+        <input
+          value={valor}
+          inputMode="numeric"
+          onChange={(event) => onChange(event.target.value)}
+          className="w-16 bg-transparent text-center text-2xl font-semibold text-[#F4FFF8] outline-none"
+        />
+
+        <button
+          type="button"
+          onClick={onMais}
+          className="text-3xl font-black text-[#D8E6DE]"
+        >
+          ›
+        </button>
+      </div>
     </div>
   )
 }
