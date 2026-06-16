@@ -101,43 +101,88 @@ const montarMapaCartoes = (cartoes) => {
   return mapa
 }
 
+const normalizarData = (valor) => {
+  if (!valor) return ''
+
+  if (valor instanceof Date && !Number.isNaN(valor.getTime())) {
+    return valor.toISOString().slice(0, 10)
+  }
+
+  const texto = String(valor).trim()
+
+  if (!texto) return ''
+
+  if (/^\d{4}-\d{2}-\d{2}/.test(texto)) {
+    return texto.slice(0, 10)
+  }
+
+  if (/^\d{2}\/\d{2}\/\d{4}$/.test(texto)) {
+    const [dia, mes, ano] = texto.split('/')
+    return `${ano}-${mes}-${dia}`
+  }
+
+  return ''
+}
+
+const normalizarStatus = (valor) => {
+  return String(valor || '').trim().toLowerCase()
+}
+
+const estaDeletado = (valor) => {
+  const texto = String(valor || '').trim()
+  return texto !== ''
+}
+
+const estaFechada = (valor) => {
+  const texto = String(valor || '').trim().toLowerCase()
+  return texto === 'true' || texto === 'sim' || texto === '1'
+}
+
 const calcularAlertas = ({ lancamentos, cartoes }) => {
   const hoje = hojeISO()
   const limiteProximosDias = adicionarDias(hoje, 5)
   const mapaCartoes = montarMapaCartoes(cartoes)
 
-  const despesasPendentes = lancamentos.filter((lancamento) => {
+  const lancamentosAtivos = lancamentos.filter((lancamento) => {
+    return !estaDeletado(lancamento.deletedAt)
+  })
+
+  const despesasPendentes = lancamentosAtivos.filter((lancamento) => {
     return (
-      !lancamento.deletedAt &&
-      lancamento.tipo === 'despesa' &&
-      lancamento.metodoPagamento !== 'cartao' &&
-      lancamento.status === 'pendente'
+      normalizarStatus(lancamento.tipo) === 'despesa' &&
+      normalizarStatus(lancamento.metodoPagamento) !== 'cartao' &&
+      normalizarStatus(lancamento.status) === 'pendente'
     )
   })
 
-  const vencidas = despesasPendentes.filter(
-    (lancamento) => String(lancamento.dataCompetencia || '') < hoje
-  )
+  const vencidas = despesasPendentes.filter((lancamento) => {
+    const data = normalizarData(lancamento.dataCompetencia)
+    return data && data < hoje
+  })
 
-  const vencendoHoje = despesasPendentes.filter(
-    (lancamento) => String(lancamento.dataCompetencia || '') === hoje
-  )
+  const vencendoHoje = despesasPendentes.filter((lancamento) => {
+    const data = normalizarData(lancamento.dataCompetencia)
+    return data && data === hoje
+  })
 
   const vencendoProximosDias = despesasPendentes.filter((lancamento) => {
-  const data = String(lancamento.dataCompetencia || '')
-
-  return data > hoje && data <= limiteProximosDias
-})
+    const data = normalizarData(lancamento.dataCompetencia)
+    return data && data > hoje && data <= limiteProximosDias
+  })
 
   const faturas = new Map()
 
-  lancamentos
+  lancamentosAtivos
     .filter((lancamento) => {
+      const valorPago = Number(lancamento.faturaValorPago || 0)
+      const valor = Number(lancamento.valor || 0)
+
       return (
-        !lancamento.deletedAt &&
-        lancamento.tipo === 'despesa' &&
-        lancamento.metodoPagamento === 'cartao' &&
-        lancamento.status === 'pendente' &&
+        normalizarStatus(lancamento.tipo) === 'despesa' &&
+        normalizarStatus(lancamento.metodoPagamento) === 'cartao' &&
+        normalizarStatus(lancamento.status) === 'pendente' &&
+        !estaFechada(lancamento.faturaFechada) &&
+        valorPago < valor &&
         lancamento.faturaRef
       )
     })
@@ -156,56 +201,30 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
       faturas.set(chave, atual)
     })
 
-  const faturasVencidas = Array.from(faturas.values()).filter((fatura) => {
+  const faturasLista = Array.from(faturas.values()).map((fatura) => {
     const cartao =
       mapaCartoes.get(String(fatura.cartaoUuid || '')) ||
       mapaCartoes.get(String(fatura.cartaoId || ''))
 
-    const vencimento = montarDataVencimentoFatura(
-      fatura.faturaRef,
-      cartao?.diaVencimento
-    )
-
-    return vencimento && vencimento < hoje
+    return {
+      ...fatura,
+      vencimento: montarDataVencimentoFatura(fatura.faturaRef, cartao?.diaVencimento)
+    }
   })
 
-  const faturasVencendoProximosDias = Array.from(faturas.values()).filter((fatura) => {
-  const cartao =
-    mapaCartoes.get(String(fatura.cartaoUuid || '')) ||
-    mapaCartoes.get(String(fatura.cartaoId || ''))
+  const faturasVencidas = faturasLista.filter((fatura) => {
+    return fatura.vencimento && fatura.vencimento < hoje
+  })
 
-  const vencimento = montarDataVencimentoFatura(
-    fatura.faturaRef,
-    cartao?.diaVencimento
-  )
+  const faturasVencendoProximosDias = faturasLista.filter((fatura) => {
+    return fatura.vencimento && fatura.vencimento >= hoje && fatura.vencimento <= limiteProximosDias
+  })
 
-  return vencimento && vencimento >= hoje && vencimento <= limiteProximosDias
-})
-
-  const totalVencidas = vencidas.reduce(
-    (total, item) => total + Number(item.valor || 0),
-    0
-  )
-
-  const totalHoje = vencendoHoje.reduce(
-    (total, item) => total + Number(item.valor || 0),
-    0
-  )
-
-  const totalProximosDias = vencendoProximosDias.reduce(
-  (total, item) => total + Number(item.valor || 0),
-  0
-)
-
-  const totalFaturasVencidas = faturasVencidas.reduce(
-    (total, item) => total + Number(item.total || 0),
-    0
-  )
-
-  const totalFaturasProximosDias = faturasVencendoProximosDias.reduce(
-  (total, item) => total + Number(item.total || 0),
-  0
-)
+  const totalVencidas = vencidas.reduce((total, item) => total + Number(item.valor || 0), 0)
+  const totalHoje = vencendoHoje.reduce((total, item) => total + Number(item.valor || 0), 0)
+  const totalProximosDias = vencendoProximosDias.reduce((total, item) => total + Number(item.valor || 0), 0)
+  const totalFaturasVencidas = faturasVencidas.reduce((total, item) => total + Number(item.total || 0), 0)
+  const totalFaturasProximosDias = faturasVencendoProximosDias.reduce((total, item) => total + Number(item.total || 0), 0)
 
   const partes = []
 
@@ -218,16 +237,16 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
   }
 
   if (vencendoProximosDias.length > 0) {
-  partes.push(`${vencendoProximosDias.length} vencendo nos próximos 5 dias: ${formatarMoeda(totalProximosDias)}`)
-}
+    partes.push(`${vencendoProximosDias.length} vencendo nos próximos 5 dias: ${formatarMoeda(totalProximosDias)}`)
+  }
 
   if (faturasVencidas.length > 0) {
     partes.push(`${faturasVencidas.length} fatura(s) vencida(s): ${formatarMoeda(totalFaturasVencidas)}`)
   }
 
   if (faturasVencendoProximosDias.length > 0) {
-  partes.push(`${faturasVencendoProximosDias.length} fatura(s) vencendo nos próximos 5 dias: ${formatarMoeda(totalFaturasProximosDias)}`)
-}
+    partes.push(`${faturasVencendoProximosDias.length} fatura(s) vencendo nos próximos 5 dias: ${formatarMoeda(totalFaturasProximosDias)}`)
+  }
 
   return {
     deveNotificar: partes.length > 0,
@@ -238,7 +257,7 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
       vencendoHoje: vencendoHoje.length,
       vencendoProximosDias: vencendoProximosDias.length,
       faturasVencidas: faturasVencidas.length,
-faturasVencendoProximosDias: faturasVencendoProximosDias.length
+      faturasVencendoProximosDias: faturasVencendoProximosDias.length
     }
   }
 }
