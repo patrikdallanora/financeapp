@@ -15,7 +15,7 @@ import {
 } from 'lucide-react'
 
 import { db, agoraISO, softDelete } from '../db/database'
-import { agendarSync } from '../sync/syncManager'
+import { agendarSync, executarSync } from '../sync/syncManager'
 import { CardPremium } from '../components/CardPremium'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
@@ -49,6 +49,15 @@ const normalizarTexto = (texto) => {
     .replace(/[\u0300-\u036f]/g, '')
     .toLowerCase()
     .trim()
+}
+
+const valorBooleano = (valor) => {
+  if (valor === true) return true
+  if (valor === false) return false
+
+  const texto = String(valor || '').trim().toLowerCase()
+
+  return texto === 'true' || texto === 'sim' || texto === '1'
 }
 
 const categoriaEhReembolso = (categoria) => {
@@ -511,7 +520,7 @@ cartao: lancamento.cartao,
     const lista = Array.from(mapa.values()).map((fatura) => {
       const valoresPagos = fatura.itens.map((item) => Number(item.faturaValorPago || 0))
       const valorPago = valoresPagos.length > 0 ? Math.max(...valoresPagos) : 0
-      const fechadaPorCampo = fatura.itens.some((item) => Boolean(item.faturaFechada))
+      const fechadaPorCampo = fatura.itens.some((item) => valorBooleano(item.faturaFechada))
       const fechadaPorValor = valorPago >= fatura.total && fatura.total > 0
       const fechada = fechadaPorCampo || fechadaPorValor
 
@@ -661,23 +670,56 @@ cartao: lancamento.cartao,
   }
 
   const salvarPagamentoFatura = async () => {
-    if (!modalPagamento) return
+  if (!modalPagamento) return
 
-    const valorInformado = moedaParaNumero(valorPagamentoFatura)
+  const valorInformado = moedaParaNumero(valorPagamentoFatura)
 
-    if (!valorInformado || valorInformado <= 0) {
-      alert('Informe um valor válido para pagamento.')
-      return
-    }
+  if (!valorInformado || valorInformado <= 0) {
+    alert('Informe um valor válido para pagamento.')
+    return
+  }
 
-    const valorPagoAnterior = Number(modalPagamento.valorPago || 0)
-    const novoValorPago = Math.min(valorPagoAnterior + valorInformado, Number(modalPagamento.total || 0))
-    const faturaFechada = novoValorPago >= Number(modalPagamento.total || 0)
-    const agora = agoraISO()
-    const dataPagamento = new Date().toISOString().slice(0, 10)
+  const itensAtualizados = await db.lancamentos
+    .filter((item) => {
+      if (item.deletedAt) return false
 
-    for (const item of modalPagamento.itens) {
-      await db.lancamentos.update(item.id, {
+      const mesmoCartao =
+        item.cartaoUuid === modalPagamento.cartaoUuid ||
+        Number(item.cartaoId) === Number(modalPagamento.cartaoId)
+
+      return mesmoCartao && item.faturaRef === modalPagamento.faturaRef
+    })
+    .toArray()
+
+  const itensDaFatura = itensAtualizados.length > 0 ? itensAtualizados : modalPagamento.itens
+
+  const totalFatura = itensDaFatura.reduce(
+    (total, item) => total + Number(item.valor || 0),
+    0
+  )
+
+  const valorPagoAnterior = Math.max(
+    ...itensDaFatura.map((item) => Number(item.faturaValorPago || 0)),
+    0
+  )
+
+  const totalCentavos = Math.round(totalFatura * 100)
+  const valorPagoAnteriorCentavos = Math.round(valorPagoAnterior * 100)
+  const valorInformadoCentavos = Math.round(valorInformado * 100)
+
+  const novoValorPagoCentavos = Math.min(
+    valorPagoAnteriorCentavos + valorInformadoCentavos,
+    totalCentavos
+  )
+
+  const novoValorPago = novoValorPagoCentavos / 100
+  const faturaFechada = novoValorPagoCentavos >= totalCentavos
+  const agora = agoraISO()
+  const dataPagamento = new Date().toISOString().slice(0, 10)
+
+  await Promise.all(
+    itensDaFatura.map((item) =>
+      db.lancamentos.update(item.id, {
         faturaValorPago: novoValorPago,
         faturaFechada,
         status: faturaFechada ? 'pago' : 'pendente',
@@ -685,11 +727,14 @@ cartao: lancamento.cartao,
         updatedAt: agora,
         syncStatus: 'pending'
       })
-    }
+    )
+  )
 
-    agendarSync()
-    fecharModalPagamento()
-  }
+  agendarSync()
+  await executarSync()
+
+  fecharModalPagamento()
+}
 
   const reabrirFatura = async (fatura) => {
     const agora = agoraISO()

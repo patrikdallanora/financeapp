@@ -138,6 +138,32 @@ const estaFechada = (valor) => {
   return texto === 'true' || texto === 'sim' || texto === '1'
 }
 
+const formatarDataCurta = (dataISO) => {
+  if (!dataISO || !String(dataISO).includes('-')) return ''
+
+  const [ano, mes, dia] = String(dataISO).split('-')
+
+  return `${dia}/${mes}`
+}
+
+const formatarNomeFatura = (faturaRef) => {
+  if (!faturaRef || !String(faturaRef).includes('-')) return 'Fatura'
+
+  const [ano, mes] = String(faturaRef).split('-').map(Number)
+  const data = new Date(ano, mes - 1, 1)
+  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')
+
+  return `${nomeMes}/${String(ano).slice(-2)}`
+}
+
+const nomeCartao = (fatura, mapaCartoes) => {
+  const cartao =
+    mapaCartoes.get(String(fatura.cartaoUuid || '')) ||
+    mapaCartoes.get(String(fatura.cartaoId || ''))
+
+  return cartao?.nome || 'Cartão'
+}
+
 const calcularAlertas = ({ lancamentos, cartoes }) => {
   const hoje = hojeISO()
   const limiteProximosDias = adicionarDias(hoje, 5)
@@ -228,25 +254,66 @@ const calcularAlertas = ({ lancamentos, cartoes }) => {
 
   const partes = []
 
-  if (vencidas.length > 0) {
-    partes.push(`${vencidas.length} despesa(s) vencida(s): ${formatarMoeda(totalVencidas)}`)
-  }
+const adicionarGrupo = (titulo, itens) => {
+  if (itens.length === 0) return
 
-  if (vencendoHoje.length > 0) {
-    partes.push(`${vencendoHoje.length} vencendo hoje: ${formatarMoeda(totalHoje)}`)
-  }
+  partes.push(`${titulo}:`)
 
-  if (vencendoProximosDias.length > 0) {
-    partes.push(`${vencendoProximosDias.length} vencendo nos próximos 5 dias: ${formatarMoeda(totalProximosDias)}`)
-  }
+  itens.forEach((item) => {
+    partes.push(`• ${item.nome}: ${formatarMoeda(item.valor)}`)
+  })
+}
 
-  if (faturasVencidas.length > 0) {
-    partes.push(`${faturasVencidas.length} fatura(s) vencida(s): ${formatarMoeda(totalFaturasVencidas)}`)
-  }
+adicionarGrupo(
+  'Vencidas',
+  vencidas.map((item) => ({
+    nome: `${item.descricao || 'Despesa'} (${formatarDataCurta(normalizarData(item.dataCompetencia))})`,
+    valor: Number(item.valor || 0)
+  }))
+)
 
-  if (faturasVencendoProximosDias.length > 0) {
-    partes.push(`${faturasVencendoProximosDias.length} fatura(s) vencendo nos próximos 5 dias: ${formatarMoeda(totalFaturasProximosDias)}`)
-  }
+adicionarGrupo(
+  'Vencendo hoje',
+  vencendoHoje.map((item) => ({
+    nome: `${item.descricao || 'Despesa'} (${formatarDataCurta(normalizarData(item.dataCompetencia))})`,
+    valor: Number(item.valor || 0)
+  }))
+)
+
+adicionarGrupo(
+  'Próximos 5 dias',
+  vencendoProximosDias.map((item) => ({
+    nome: `${item.descricao || 'Despesa'} (${formatarDataCurta(normalizarData(item.dataCompetencia))})`,
+    valor: Number(item.valor || 0)
+  }))
+)
+
+adicionarGrupo(
+  'Faturas vencidas',
+  faturasVencidas.map((item) => ({
+    nome: `${nomeCartao(item, mapaCartoes)} ${formatarNomeFatura(item.faturaRef)} (${formatarDataCurta(item.vencimento)})`,
+    valor: Number(item.total || 0)
+  }))
+)
+
+adicionarGrupo(
+  'Faturas próximos 5 dias',
+  faturasVencendoProximosDias.map((item) => ({
+    nome: `${nomeCartao(item, mapaCartoes)} ${formatarNomeFatura(item.faturaRef)} (${formatarDataCurta(item.vencimento)})`,
+    valor: Number(item.total || 0)
+  }))
+)
+
+const totalGeral =
+  totalVencidas +
+  totalHoje +
+  totalProximosDias +
+  totalFaturasVencidas +
+  totalFaturasProximosDias
+
+if (partes.length > 0) {
+  partes.push(`Total: ${formatarMoeda(totalGeral)}`)
+}
 
   return {
     deveNotificar: partes.length > 0,
