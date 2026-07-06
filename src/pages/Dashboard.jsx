@@ -703,7 +703,7 @@ function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
           {titulo}
         </h2>
 
-        <div className="mt-4 flex flex-wrap justify-center gap-2">
+        <div className="mt-4 grid grid-cols-3 gap-2">
           <IndicadorUsuario titulo="Total Geral" valor={totalGeral} />
 
           {usuarios.map((usuario) => (
@@ -728,17 +728,17 @@ function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
 
 function IndicadorUsuario({ titulo, valor, subtitulo }) {
   return (
-    <div className="w-[calc(50%-4px)] min-w-0 rounded-[22px] border border-[#1C2A24] bg-[#030504]/70 px-3 py-3">
-      <p className="truncate text-[10px] font-semibold text-[#91A99C]">
+    <div className="w-full min-w-0 rounded-[18px] border border-[#1C2A24] bg-[#030504]/70 px-2 py-2">
+      <p className="text-[10px] font-semibold text-[#91A99C]">
         {titulo}
       </p>
 
-      <p className="mt-1 truncate text-[13px] font-black leading-4 text-[#F4FFF8]">
+      <p className="mt-1 text-[12px] font-black leading-4 text-[#F4FFF8]">
         {formatarMoeda(valor)}
       </p>
 
       {subtitulo && (
-        <p className="mt-1 truncate text-[9.5px] font-semibold leading-3 text-[#3AF2A1]">
+        <p className="mt-1 text-[9px] font-semibold leading-3 text-[#3AF2A1]">
           {subtitulo}
         </p>
       )}
