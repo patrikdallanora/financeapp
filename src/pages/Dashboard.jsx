@@ -703,7 +703,7 @@ function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
           {titulo}
         </h2>
 
-        <div className="mt-4 grid grid-cols-3 gap-2">
+        <div className="mt-4 flex flex-wrap justify-center gap-2">
           <IndicadorUsuario titulo="Total Geral" valor={totalGeral} />
 
           {usuarios.map((usuario) => (
@@ -728,7 +728,7 @@ function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
 
 function IndicadorUsuario({ titulo, valor, subtitulo }) {
   return (
-    <div className="min-w-0 rounded-[22px] border border-[#1C2A24] bg-[#030504]/70 px-2.5 py-3">
+    <div className="w-[calc(50%-4px)] min-w-0 rounded-[22px] border border-[#1C2A24] bg-[#030504]/70 px-3 py-3">
       <p className="truncate text-[10px] font-semibold text-[#91A99C]">
         {titulo}
       </p>
