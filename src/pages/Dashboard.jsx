@@ -396,6 +396,68 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   }
 }, [doMes, usuarios])
 
+  const participacaoBeneficiarios = useMemo(() => {
+  const base = {
+    PK: {
+      nome: 'PK',
+      pago: 0,
+      aberto: 0
+    },
+    Grazi: {
+      nome: 'Grazi',
+      pago: 0,
+      aberto: 0
+    },
+    Casal: {
+      nome: 'Casal',
+      pago: 0,
+      aberto: 0
+    }
+  }
+
+  doMes
+    .filter((lancamento) => lancamento.tipo === 'despesa')
+    .forEach((lancamento) => {
+      const beneficiario = lancamento.beneficiario || 'PK'
+
+      if (!base[beneficiario]) return
+
+      const valor = Number(lancamento.valor || 0)
+
+      const estaPago =
+        lancamento.metodoPagamento === 'cartao'
+          ? Boolean(lancamento.faturaFechada)
+          : lancamento.status === 'pago'
+
+      if (estaPago) {
+        base[beneficiario].pago += valor
+      } else {
+        base[beneficiario].aberto += valor
+      }
+    })
+
+  const lista = Object.values(base).map((beneficiario) => {
+    const total = beneficiario.pago + beneficiario.aberto
+
+    return {
+      ...beneficiario,
+      total,
+      percentualPago: total > 0 ? (beneficiario.pago / total) * 100 : 0,
+      percentualAberto: total > 0 ? (beneficiario.aberto / total) * 100 : 0
+    }
+  })
+
+  const totalGeral = lista.reduce((total, beneficiario) => total + beneficiario.total, 0)
+
+  return {
+    totalGeral,
+    usuarios: lista.map((beneficiario) => ({
+      ...beneficiario,
+      percentualTotal: totalGeral > 0 ? (beneficiario.total / totalGeral) * 100 : 0
+    }))
+  }
+}, [doMes])
+
   const gastosPorCategoria = useMemo(() => {
     if (!categorias) return []
 
@@ -544,7 +606,10 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
       <CardParticipacaoUsuarios dados={participacaoUsuarios} />
 
-      
+      <CardParticipacaoUsuarios
+      dados={participacaoBeneficiarios}
+      titulo="Gastos por beneficiário"
+    />
 
       <CardMetasDashboard metas={metasDashboard} />
 
@@ -623,7 +688,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   )
 }
 
-function CardParticipacaoUsuarios({ dados }) {
+function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
   const usuarios = dados?.usuarios || []
   const totalGeral = dados?.totalGeral || 0
 
@@ -635,7 +700,7 @@ function CardParticipacaoUsuarios({ dados }) {
         </p>
 
         <h2 className="mt-1 text-lg font-black text-[#F4FFF8]">
-          Gastos por pessoa
+          {titulo}
         </h2>
 
         <div className="mt-4 grid grid-cols-3 gap-2">
