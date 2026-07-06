@@ -606,9 +606,13 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
       <CardParticipacaoUsuarios dados={participacaoUsuarios} />
 
-      <CardParticipacaoUsuarios
-      dados={participacaoBeneficiarios}
-      titulo="Gastos por beneficiário"
+      <<CardParticipacaoUsuarios
+  dados={participacaoBeneficiarios}
+  titulo="Gastos por beneficiário"
+  corAberto="bg-blue-500"
+  corPago="bg-fuchsia-500"
+  corTextoPago="text-white"
+/>
     />
 
       <CardMetasDashboard metas={metasDashboard} />
@@ -688,7 +692,13 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   )
 }
 
-function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
+function CardParticipacaoUsuarios({
+  dados,
+  titulo = 'Gastos por pessoa',
+  corAberto = 'bg-yellow-500/90',
+  corPago = 'bg-[#3AF2A1]',
+  corTextoPago = 'text-[#021A10]'
+}) {
   const usuarios = dados?.usuarios || []
   const totalGeral = dados?.totalGeral || 0
 
@@ -719,7 +729,13 @@ function CardParticipacaoUsuarios({ dados, titulo = 'Gastos por pessoa' }) {
 
       <div className="space-y-4 p-4">
         {usuarios.map((usuario) => (
-          <BarraUsuarioFinanceiro key={usuario.nome} usuario={usuario} />
+          <BarraUsuarioFinanceiro
+  key={usuario.nome}
+  usuario={usuario}
+  corAberto={corAberto}
+  corPago={corPago}
+  corTextoPago={corTextoPago}
+/>
         ))}
       </div>
     </section>
@@ -746,7 +762,12 @@ function IndicadorUsuario({ titulo, valor, subtitulo }) {
   )
 }
 
-function BarraUsuarioFinanceiro({ usuario }) {
+function BarraUsuarioFinanceiro({
+  usuario,
+  corAberto = 'bg-yellow-500/90',
+  corPago = 'bg-[#3AF2A1]',
+  corTextoPago = 'text-[#021A10]'
+}) {
   const total = usuario.total || 0
   const aberto = usuario.aberto || 0
   const pago = usuario.pago || 0
@@ -771,14 +792,14 @@ function BarraUsuarioFinanceiro({ usuario }) {
 
       <div className="flex h-9 overflow-hidden rounded-2xl bg-[#102018]">
         <div
-          className="flex items-center justify-center bg-yellow-500/90 px-2 text-[10px] font-black text-black transition-all"
+          className={`flex items-center justify-center ${corAberto} px-2 text-[10px] font-black text-black transition-all`}
           style={{ width: `${Math.max(usuario.percentualAberto, aberto > 0 ? 8 : 0)}%` }}
         >
           {aberto > 0 && `${formatarMoeda(aberto)} · ${formatarPercentual(usuario.percentualAberto)}`}
         </div>
 
         <div
-          className="flex items-center justify-center bg-[#3AF2A1] px-2 text-[10px] font-black text-[#021A10] transition-all"
+          className={`flex items-center justify-center ${corPago} px-2 text-[10px] font-black ${corTextoPago} transition-all`}
           style={{ width: `${Math.max(usuario.percentualPago, pago > 0 ? 8 : 0)}%` }}
         >
           {pago > 0 && `${formatarMoeda(pago)} · ${formatarPercentual(usuario.percentualPago)}`}
