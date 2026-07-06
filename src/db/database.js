@@ -10,7 +10,7 @@ const schema = {
     '++id, uuid, nome, ativo, updatedAt, deletedAt, syncStatus',
 
   lancamentos:
-    '++id, uuid, tipo, usuarioId, usuarioUuid, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, cartaoUuid, faturaRef, categoriaId, categoriaUuid, subcategoriaId, subcategoriaUuid, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus',
+    '++id, uuid, tipo, usuarioId, usuarioUuid, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, cartaoUuid, faturaRef, categoriaId, categoriaUuid, subcategoriaId, subcategoriaUuid, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus, beneficiario',
   
   faturas:
     '++id, uuid, cartaoId, faturaRef, status, updatedAt, syncStatus',

@@ -80,6 +80,7 @@ const obterMapaUltimosPulls = () => {
 
 const CHAVE_META_LOCAL = 'financeapp_sync_meta_local'
 const CHAVE_ULTIMO_PULL_INICIAL = 'financeapp_ultimo_pull_inicial'
+const CHAVE_MIGRACAO_BENEFICIARIO = 'financeapp_migracao_beneficiario_v1'
 
 const obterMetaLocal = () => {
   const bruto = localStorage.getItem(CHAVE_META_LOCAL)
@@ -495,6 +496,68 @@ export const pullBatchSync = async (tabelasSolicitadas = TABELAS) => {
   return resultado
 }
 
+const preencherBeneficiarioLancamentosExistentes = async () => {
+  const migracaoJaExecutada = localStorage.getItem(CHAVE_MIGRACAO_BENEFICIARIO)
+
+  if (migracaoJaExecutada) {
+    return {
+      executou: false,
+      atualizados: 0
+    }
+  }
+
+  const usuarios = await db.usuarios.toArray()
+  const lancamentos = await db.lancamentos.toArray()
+
+  const mapaUsuarios = new Map()
+
+  usuarios.forEach((usuario) => {
+    if (usuario.id !== undefined && usuario.id !== null) {
+      mapaUsuarios.set(String(usuario.id), usuario)
+    }
+
+    if (usuario.uuid) {
+      mapaUsuarios.set(String(usuario.uuid), usuario)
+    }
+  })
+
+  let atualizados = 0
+  const agora = new Date().toISOString()
+
+  for (const lancamento of lancamentos) {
+    if (lancamento.deletedAt) continue
+    if (lancamento.beneficiario) continue
+
+    const usuario =
+      mapaUsuarios.get(String(lancamento.usuarioId || '')) ||
+      mapaUsuarios.get(String(lancamento.usuarioUuid || ''))
+
+    const nomeUsuario = String(usuario?.nome || '').trim()
+
+    const beneficiario =
+      nomeUsuario === 'Grazi'
+        ? 'Grazi'
+        : nomeUsuario === 'Casal'
+          ? 'Casal'
+          : 'PK'
+
+    await db.lancamentos.update(lancamento.id, {
+      beneficiario,
+      updatedAt: agora,
+      syncStatus: 'pending'
+    })
+
+    atualizados++
+  }
+
+  localStorage.setItem(CHAVE_MIGRACAO_BENEFICIARIO, agora)
+
+  return {
+    executou: true,
+    atualizados
+  }
+}
+
 export const executarPullInicial = async () => {
   const config = verificarConfiguracaoSync()
 
@@ -559,6 +622,12 @@ export const executarPullInicial = async () => {
 
   try {
   const pull = await pullBatchSync(TABELAS)
+
+  const migracaoBeneficiario = await preencherBeneficiarioLancamentosExistentes()
+
+if (migracaoBeneficiario.atualizados > 0) {
+  await pushSync()
+}
 
   atualizarEstadoGlobalSync({
     sincronizando: false,

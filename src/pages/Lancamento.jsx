@@ -92,6 +92,7 @@ const normalizarTexto = (texto) => {
 export default function Lancamento({ onVoltar, configInicial }) {
   const [tipo] = useState(configInicial?.tipo || 'despesa')
   const [usuarioId, setUsuarioId] = useState('')
+  const [responsavel, setResponsavel] = useState('pk')
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [dataCompetencia, setDataCompetencia] = useState(agora())
