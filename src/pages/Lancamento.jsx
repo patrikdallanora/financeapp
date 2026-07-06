@@ -92,7 +92,7 @@ const normalizarTexto = (texto) => {
 export default function Lancamento({ onVoltar, configInicial }) {
   const [tipo] = useState(configInicial?.tipo || 'despesa')
   const [usuarioId, setUsuarioId] = useState('')
-  const [responsavel, setResponsavel] = useState('pk')
+  const [beneficiario, setBeneficiario] = useState('PK')
   const [descricao, setDescricao] = useState('')
   const [valor, setValor] = useState('')
   const [dataCompetencia, setDataCompetencia] = useState(agora())
@@ -396,6 +396,7 @@ const subcategoria = subcategorias?.find(
       tipo,
       usuarioId: Number(usuarioSelecionado),
       usuarioUuid: usuario?.uuid || null,
+      beneficiario,
       descricao: descricao.trim(),
       valor: valorNumerico,
       dataCompetencia,
@@ -555,6 +556,22 @@ const subcategoria = subcategorias?.find(
                 {usuario.nome}
               </option>
             ))}
+          </select>
+        </label>
+
+        <label className="block">
+          <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
+            Beneficiário
+          </span>
+
+          <select
+            value={beneficiario}
+            onChange={(event) => setBeneficiario(event.target.value)}
+            className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+          >
+            <option value="PK">PK</option>
+            <option value="Grazi">Grazi</option>
+            <option value="Casal">Casal</option>
           </select>
         </label>
 
