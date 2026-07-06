@@ -606,14 +606,13 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
       <CardParticipacaoUsuarios dados={participacaoUsuarios} />
 
-      <<CardParticipacaoUsuarios
+      <CardParticipacaoUsuarios
   dados={participacaoBeneficiarios}
   titulo="Gastos por beneficiário"
   corAberto="bg-blue-500"
   corPago="bg-fuchsia-500"
   corTextoPago="text-white"
 />
-    />
 
       <CardMetasDashboard metas={metasDashboard} />
 
