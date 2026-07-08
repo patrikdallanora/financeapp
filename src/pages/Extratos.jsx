@@ -229,15 +229,26 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [expandidoId, setExpandidoId] = useState(null)
   const [faturaExpandidaId, setFaturaExpandidaId] = useState(null)
 
-  const [editor, setEditor] = useState(null)
-  const [descricaoEdicao, setDescricaoEdicao] = useState('')
-  const [valorEdicao, setValorEdicao] = useState('')
-  const [categoriaEdicaoId, setCategoriaEdicaoId] = useState('')
-  const [subcategoriaEdicaoId, setSubcategoriaEdicaoId] = useState('')
-  const [escopoEdicao, setEscopoEdicao] = useState('este')
-
   const [modalPagamento, setModalPagamento] = useState(null)
   const [valorPagamentoFatura, setValorPagamentoFatura] = useState('')
+
+  const [editorLancamento, setEditorLancamento] = useState(null)
+  const [salvandoEditor, setSalvandoEditor] = useState(false)
+  const [escopoEditorLancamento, setEscopoEditorLancamento] = useState('este')
+
+  const [camposEditorLancamento, setCamposEditorLancamento] = useState({
+    descricao: '',
+    valor: '',
+    beneficiario: 'PK',
+    dataCompetencia: '',
+    status: 'pendente',
+    categoriaId: '',
+    subcategoriaId: '',
+    metodoPagamento: 'pix',
+    cartaoId: '',
+    faturaRef: '',
+    observacoes: ''
+  })
 
   useEffect(() => {
     const novosFiltros = obterFiltrosDetalhadosIniciais(filtroInicial)
@@ -620,34 +631,6 @@ cartao: lancamento.cartao,
     setFiltroCartaoId('todos')
   }
 
-  const abrirEditorDescricao = (lancamento) => {
-    setEditor({ tipo: 'descricao', lancamento })
-    setDescricaoEdicao(lancamento.descricao || '')
-    setEscopoEdicao('este')
-  }
-
-  const abrirEditorValor = (lancamento) => {
-    setEditor({ tipo: 'valor', lancamento })
-    setValorEdicao(formatarCampoMoeda(String(Math.round(Number(lancamento.valor || 0) * 100))))
-    setEscopoEdicao('este')
-  }
-
-  const abrirEditorCategoria = (lancamento) => {
-    setEditor({ tipo: 'categoria', lancamento })
-    setCategoriaEdicaoId(String(lancamento.categoriaId || ''))
-    setSubcategoriaEdicaoId(String(lancamento.subcategoriaId || ''))
-    setEscopoEdicao('este')
-  }
-
-  const fecharEditor = () => {
-    setEditor(null)
-    setDescricaoEdicao('')
-    setValorEdicao('')
-    setCategoriaEdicaoId('')
-    setSubcategoriaEdicaoId('')
-    setEscopoEdicao('este')
-  }
-
   const abrirPagamentoFatura = (fatura) => {
     if (fatura.fechada) {
       const confirmar = confirm(`Reabrir a fatura ${formatarFaturaRef(fatura.faturaRef)} do cartão ${fatura.cartao?.nome || 'Cartão'}?`)
@@ -785,113 +768,143 @@ cartao: lancamento.cartao,
     return relacionados.length > 0 ? relacionados : [lancamento]
   }
 
-  const salvarEdicao = async () => {
-    if (!editor?.lancamento) return
+  const abrirEditorLancamento = (lancamento) => {
+    setEditorLancamento(lancamento)
+    setEscopoEditorLancamento('este')
 
-    const lancamento = editor.lancamento
+    setCamposEditorLancamento({
+      descricao: lancamento.descricao || '',
+      valor: formatarCampoMoeda(String(Math.round(Number(lancamento.valor || 0) * 100))),
+      beneficiario: lancamento.beneficiario || 'PK',
+      dataCompetencia: normalizarDataCivil(lancamento.dataCompetencia) || '',
+      status: lancamento.status || 'pendente',
+      categoriaId: String(lancamento.categoriaId || ''),
+      subcategoriaId: String(lancamento.subcategoriaId || ''),
+      metodoPagamento: lancamento.metodoPagamento || 'pix',
+      cartaoId: String(lancamento.cartaoId || ''),
+      faturaRef: lancamento.faturaRef || '',
+      observacoes: lancamento.observacoes || ''
+    })
+  }
+
+  const salvarEditorLancamento = async () => {
+    if (!editorLancamento) return
+    if (salvandoEditor) return
+
+    setSalvandoEditor(true)
+
+    try {
+    const descricaoFinal = camposEditorLancamento.descricao.trim()
+    const valorFinal = moedaParaNumero(camposEditorLancamento.valor)
+
+    if (!descricaoFinal) {
+      alert('Informe a descrição.')
+      return
+    }
+
+    if (!valorFinal || valorFinal <= 0) {
+      alert('Informe um valor válido.')
+      return
+    }
+
+    if (!camposEditorLancamento.dataCompetencia) {
+      alert('Informe a competência.')
+      return
+    }
+
+    if (!camposEditorLancamento.categoriaId) {
+      alert('Selecione uma categoria.')
+      return
+    }
+
+    if (!camposEditorLancamento.subcategoriaId) {
+      alert('Selecione uma subcategoria.')
+      return
+    }
+
+    if (
+      camposEditorLancamento.metodoPagamento === 'cartao' &&
+      (!camposEditorLancamento.cartaoId || !camposEditorLancamento.faturaRef)
+    ) {
+      alert('Selecione o cartão e a fatura.')
+      return
+    }
+
+    const relacionados = obterRelacionados(
+      editorLancamento,
+      escopoEditorLancamento
+    )
+
     const agora = agoraISO()
-    const registros = obterRelacionados(lancamento, escopoEdicao)
 
-    let alteracoes = null
+    const categoria = categorias.find(
+      (item) => Number(item.id) === Number(camposEditorLancamento.categoriaId)
+    )
 
-    if (editor.tipo === 'descricao') {
-      const descricaoFinal = descricaoEdicao.trim()
+    const subcategoria = subcategorias.find(
+      (item) => Number(item.id) === Number(camposEditorLancamento.subcategoriaId)
+    )
 
-      if (!descricaoFinal) {
-        alert('Informe uma descrição válida.')
-        return
-      }
+    const cartao = cartoes.find(
+      (item) => Number(item.id) === Number(camposEditorLancamento.cartaoId)
+    )
 
-      alteracoes = {
-        descricao: descricaoFinal,
-        updatedAt: agora,
-        syncStatus: 'pending'
-      }
+    const metodoPagamentoFinal = camposEditorLancamento.metodoPagamento
+    const statusFinal = camposEditorLancamento.status
+
+    const alteracoes = {
+      descricao: descricaoFinal,
+      valor: valorFinal,
+      beneficiario: camposEditorLancamento.beneficiario || 'PK',
+      dataCompetencia: camposEditorLancamento.dataCompetencia,
+      status: statusFinal,
+      dataPagamento: statusFinal === 'pago' ? new Date().toISOString().slice(0, 10) : null,
+
+      categoriaId: Number(camposEditorLancamento.categoriaId),
+      categoriaUuid: categoria?.uuid || null,
+
+      subcategoriaId: Number(camposEditorLancamento.subcategoriaId),
+      subcategoriaUuid: subcategoria?.uuid || null,
+
+      metodoPagamento: metodoPagamentoFinal,
+
+      cartaoId:
+        metodoPagamentoFinal === 'cartao'
+          ? Number(camposEditorLancamento.cartaoId)
+          : null,
+
+      cartaoUuid:
+        metodoPagamentoFinal === 'cartao'
+          ? cartao?.uuid || null
+          : null,
+
+      faturaRef:
+        metodoPagamentoFinal === 'cartao'
+          ? camposEditorLancamento.faturaRef
+          : null,
+
+      observacoes: camposEditorLancamento.observacoes.trim(),
+
+      updatedAt: agora,
+      syncStatus: 'pending'
     }
 
-    if (editor.tipo === 'valor') {
-      const valorFinal = moedaParaNumero(valorEdicao)
-
-      if (!valorFinal || valorFinal <= 0) {
-        alert('Informe um valor válido.')
-        return
-      }
-
-      alteracoes = {
-        valor: valorFinal,
-        updatedAt: agora,
-        syncStatus: 'pending'
-      }
+    if (metodoPagamentoFinal !== 'cartao') {
+      alteracoes.faturaValorPago = 0
+      alteracoes.faturaFechada = false
     }
 
-    if (editor.tipo === 'categoria') {
-      if (!categoriaEdicaoId) {
-        alert('Selecione uma categoria.')
-        return
-      }
-
-      if (!subcategoriaEdicaoId) {
-        alert('Selecione uma subcategoria.')
-        return
-      }
-
-      const categoriaSelecionada = categorias.find(
-  (categoria) => Number(categoria.id) === Number(categoriaEdicaoId)
-)
-
-const subcategoriaSelecionada = subcategorias.find(
-  (subcategoria) => Number(subcategoria.id) === Number(subcategoriaEdicaoId)
-)
-
-alteracoes = {
-  categoriaId: Number(categoriaEdicaoId),
-  categoriaUuid: categoriaSelecionada?.uuid || null,
-  subcategoriaId: Number(subcategoriaEdicaoId),
-  subcategoriaUuid: subcategoriaSelecionada?.uuid || null,
-  updatedAt: agora,
-  syncStatus: 'pending'
-}
+    for (const lancamento of relacionados) {
+      await db.lancamentos.update(lancamento.id, alteracoes)
     }
 
-    if (!alteracoes) return
-
-    for (const item of registros) {
-      await db.lancamentos.update(item.id, alteracoes)
-    }
+    setEditorLancamento(null)
 
     agendarSync()
-    fecharEditor()
+    } finally {
+  setSalvandoEditor(false)
+}
   }
-
-  const possuiRelacionados = Boolean(editor?.lancamento?.parcelamentoId || editor?.lancamento?.recorrenciaId)
-
-  const categoriasEditor = useMemo(() => {
-    if (!categorias || !editor?.lancamento) return []
-
-    return categorias.filter(
-      (categoria) =>
-        categoria.tipo === editor.lancamento.tipo ||
-        categoria.tipo === 'ambos'
-    )
-  }, [categorias, editor])
-
-  const subcategoriasEditor = useMemo(() => {
-  if (!subcategorias || !categorias || !categoriaEdicaoId) {
-    return []
-  }
-
-  const categoriaSelecionada = categorias.find(
-    (categoria) => Number(categoria.id) === Number(categoriaEdicaoId)
-  )
-
-  if (!categoriaSelecionada) return []
-
-  return subcategorias.filter(
-    (subcategoria) =>
-      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
-      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
-  )
-}, [subcategorias, categorias, categoriaEdicaoId])
 
   if (!lancamentos || !categorias || !subcategorias || !cartoes) {
     return (
@@ -1132,9 +1145,7 @@ alteracoes = {
                       onAlternarExpansao={() =>
                         setFaturaExpandidaId((atual) => (atual === fatura.id ? null : fatura.id))
                       }
-                      onEditarDescricao={abrirEditorDescricao}
-                      onEditarValor={abrirEditorValor}
-                      onEditarCategoria={abrirEditorCategoria}
+                      onEditarLancamento={abrirEditorLancamento}
                       expandidoId={expandidoId}
                       setExpandidoId={setExpandidoId}
                     />
@@ -1149,9 +1160,7 @@ alteracoes = {
                     onToggle={() =>
                       setExpandidoId((atual) => (atual === item.lancamento.id ? null : item.lancamento.id))
                     }
-                    onEditarDescricao={abrirEditorDescricao}
-                    onEditarValor={abrirEditorValor}
-                    onEditarCategoria={abrirEditorCategoria}
+                    onEditarLancamento={abrirEditorLancamento}
                   />
                 )
               })}
@@ -1168,29 +1177,21 @@ alteracoes = {
         )}
       </section>
 
-      {editor && (
-        <EditorRapido
-          editor={editor}
-          descricaoEdicao={descricaoEdicao}
-          setDescricaoEdicao={setDescricaoEdicao}
-          valorEdicao={valorEdicao}
-          setValorEdicao={setValorEdicao}
-          categoriaEdicaoId={categoriaEdicaoId}
-          setCategoriaEdicaoId={(valor) => {
-            setCategoriaEdicaoId(valor)
-            setSubcategoriaEdicaoId('')
-          }}
-          subcategoriaEdicaoId={subcategoriaEdicaoId}
-          setSubcategoriaEdicaoId={setSubcategoriaEdicaoId}
-          categoriasEditor={categoriasEditor}
-          subcategoriasEditor={subcategoriasEditor}
-          escopoEdicao={escopoEdicao}
-          setEscopoEdicao={setEscopoEdicao}
-          possuiRelacionados={possuiRelacionados}
-          onSalvar={salvarEdicao}
-          onFechar={fecharEditor}
-        />
-      )}
+        {editorLancamento && (
+          <ModalEditorLancamento
+            lancamento={editorLancamento}
+            campos={camposEditorLancamento}
+            setCampos={setCamposEditorLancamento}
+            escopo={escopoEditorLancamento}
+            setEscopo={setEscopoEditorLancamento}
+            categorias={categorias}
+            subcategorias={subcategorias}
+            cartoes={cartoes}
+            onFechar={() => setEditorLancamento(null)}
+            onSalvar={salvarEditorLancamento}
+            salvandoEditor={salvandoEditor}
+          />
+        )}
 
       {modalPagamento && (
         <ModalPagamentoFatura
@@ -1239,9 +1240,7 @@ function CardFatura({
   expandida,
   onAlternarPagamento,
   onAlternarExpansao,
-  onEditarDescricao,
-  onEditarValor,
-  onEditarCategoria,
+  onEditarLancamento,
   expandidoId,
   setExpandidoId
 }) {
@@ -1324,9 +1323,7 @@ function CardFatura({
                 onToggle={() =>
                   setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
                 }
-                onEditarDescricao={onEditarDescricao}
-                onEditarValor={onEditarValor}
-                onEditarCategoria={onEditarCategoria}
+                onEditarLancamento={onEditarLancamento}
               />
             ))}
           </div>
@@ -1340,9 +1337,7 @@ function GrupoExtratos({
   itens,
   expandidoId,
   setExpandidoId,
-  onEditarDescricao,
-  onEditarValor,
-  onEditarCategoria
+  onEditarLancamento
 }) {
   return (
     <div className="space-y-3">
@@ -1354,9 +1349,7 @@ function GrupoExtratos({
           onToggle={() =>
             setExpandidoId((atual) => (atual === lancamento.id ? null : lancamento.id))
           }
-          onEditarDescricao={onEditarDescricao}
-          onEditarValor={onEditarValor}
-          onEditarCategoria={onEditarCategoria}
+          
         />
       ))}
     </div>
@@ -1367,9 +1360,7 @@ function CardExtrato({
   lancamento,
   expandido,
   onToggle,
-  onEditarDescricao,
-  onEditarValor,
-  onEditarCategoria,
+  onEditarLancamento,
   controlePorFatura = false
 }) {
   const positivo = lancamento.tipo === 'receita'
@@ -1432,7 +1423,7 @@ const classeIconeLancamento = lancamentoPago
   return (
     <CardPremium className="overflow-hidden rounded-[20px] border-[#1C3D2E] bg-[#03130C]/90 p-0 shadow-[0_0_22px_rgba(58,242,161,0.06)]">
       <button
-        onClick={onToggle}
+        onClick={() => onEditarLancamento(lancamento)}
         className="grid min-h-[44px] w-full grid-cols-[54px_minmax(0,1fr)_18px] items-center gap-2 px-3 py-0.5 text-left active:scale-[0.995]"
       >
         <div className={`flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-2xl border ${classeIconeLancamento}`}>
@@ -1456,7 +1447,7 @@ const classeIconeLancamento = lancamentoPago
             type="button"
             onClick={(event) => {
               event.stopPropagation()
-              onEditarDescricao(lancamento)
+              onEditarLancamento(lancamento)
             }}
             className="block w-full text-left text-[12.5px] font-black leading-[16px] text-[#F4FFF8] overflow-hidden"
 style={{
@@ -1477,7 +1468,7 @@ style={{
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                onEditarCategoria(lancamento)
+                onEditarLancamento(lancamento)
               }}
               className="min-w-0 truncate text-left text-[10.5px] font-semibold leading-[13px] text-[#B5CFC1]"
             >
@@ -1489,7 +1480,7 @@ style={{
               type="button"
               onClick={(event) => {
                 event.stopPropagation()
-                onEditarValor(lancamento)
+                onEditarLancamento(lancamento)
               }}
               className="shrink-0 text-right"
             >
@@ -1500,10 +1491,19 @@ style={{
           </div>
         </div>
 
-        <ChevronDown
-          size={14}
-          className={`shrink-0 text-[#B5CFC1] transition ${expandido ? 'rotate-180' : ''}`}
-        />
+        <button
+          type="button"
+          onClick={(event) => {
+            event.stopPropagation()
+            onToggle()
+          }}
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl text-[#B5CFC1] active:scale-95"
+        >
+          <ChevronDown
+            size={14}
+            className={`transition ${expandido ? 'rotate-180' : ''}`}
+          />
+        </button>
       </button>
 
       <div
@@ -1564,7 +1564,7 @@ function ModalPagamentoFatura({
 
   return (
     <div className="fixed inset-0 z-[85] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C3D2E] bg-[#03130C] p-4 shadow-2xl">
+      <div className="max-h-[90vh] w-full max-w-[430px] overflow-y-auto rounded-[30px] border border-[#1C3D2E] bg-[#03130C] p-4 shadow-2xl">
         <div className="mb-4 flex items-center justify-between">
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3AF2A1]">
@@ -1613,40 +1613,44 @@ function ModalPagamentoFatura({
   )
 }
 
-function EditorRapido({
-  editor,
-  descricaoEdicao,
-  setDescricaoEdicao,
-  valorEdicao,
-  setValorEdicao,
-  categoriaEdicaoId,
-  setCategoriaEdicaoId,
-  subcategoriaEdicaoId,
-  setSubcategoriaEdicaoId,
-  categoriasEditor,
-  subcategoriasEditor,
-  escopoEdicao,
-  setEscopoEdicao,
-  possuiRelacionados,
-  onSalvar,
-  onFechar
-}) {
-  const titulo = {
-    descricao: 'Editar descrição',
-    valor: 'Editar valor',
-    categoria: 'Editar categoria'
-  }[editor.tipo]
+const calcularFaturaEditor = (dataCompetencia, cartao) => {
+  if (!dataCompetencia || !cartao) return ''
 
+  const [ano, mes, dia] = dataCompetencia.split('-').map(Number)
+  const dataBase = new Date(ano, mes - 1, 1)
+
+  if (dia > Number(cartao.diaFechamento || 31)) {
+    dataBase.setMonth(dataBase.getMonth() + 1)
+  }
+
+  return dataBase.toISOString().slice(0, 7)
+}
+
+function ModalEditorLancamento({
+  lancamento,
+  campos,
+  setCampos,
+  escopo,
+  setEscopo,
+  categorias,
+  subcategorias,
+  cartoes,
+  onFechar,
+  onSalvar,
+  salvandoEditor
+}) {
   return (
-    <div className="fixed inset-0 z-[80] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C3D2E] bg-[#03130C] p-4 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
+    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
+      <div className="flex max-h-[90vh] w-full max-w-[430px] flex-col overflow-hidden rounded-[30px] border border-[#1C3D2E] bg-[#03130C] shadow-2xl">
+        <div className="flex items-center justify-between border-b border-[#1C3D2E] px-4 py-4">
+          
           <div>
             <p className="text-xs font-black uppercase tracking-[0.2em] text-[#3AF2A1]">
-              Edição rápida
+              Editar lançamento
             </p>
+
             <h2 className="mt-1 text-xl font-black text-[#F4FFF8]">
-              {titulo}
+              {lancamento.descricao}
             </h2>
           </div>
 
@@ -1658,110 +1662,282 @@ function EditorRapido({
           </button>
         </div>
 
+        <div className="flex-1 overflow-y-auto px-4 py-4">
+
         <div className="space-y-3">
-          {editor.tipo === 'descricao' && (
-            <input
-              autoFocus
-              value={descricaoEdicao}
-              onChange={(event) => setDescricaoEdicao(event.target.value)}
-              className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-            />
-          )}
 
-          {editor.tipo === 'valor' && (
-            <input
-              autoFocus
-              value={valorEdicao}
-              inputMode="numeric"
-              onChange={(event) => setValorEdicao(formatarCampoMoeda(event.target.value))}
-              className="min-h-[52px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-center text-xl font-black text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-            />
-          )}
+            {(lancamento.parcelamentoId || lancamento.recorrenciaId) && (
+              <div className="rounded-3xl border border-[#1C3D2E] bg-black/35 p-2">
+                <p className="mb-2 px-2 text-xs font-black text-[#91A99C]">
+                  Alterar:
+                </p>
 
-          {editor.tipo === 'categoria' && (
-            <>
-              <label className="block">
-                <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-                  Categoria
-                </span>
+                <div className="grid gap-2">
+                  <OpcaoEscopo
+                    ativo={escopo === 'este'}
+                    onClick={() => setEscopo('este')}
+                  >
+                    Somente este lançamento
+                  </OpcaoEscopo>
 
-                <select
-                  value={categoriaEdicaoId}
-                  onChange={(event) => setCategoriaEdicaoId(event.target.value)}
-                  className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-                >
-                  <option value="">Selecione</option>
-                  {categoriasEditor.map((categoria) => (
-                    <option key={categoria.id} value={categoria.id}>
-                      {categoria.nome}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <OpcaoEscopo
+                    ativo={escopo === 'a_partir'}
+                    onClick={() => setEscopo('a_partir')}
+                  >
+                    A partir deste lançamento
+                  </OpcaoEscopo>
 
-              <label className="block">
-                <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-                  Subcategoria
-                </span>
+                  <OpcaoEscopo
+                    ativo={escopo === 'todos'}
+                    onClick={() => setEscopo('todos')}
+                  >
+                    Todos relacionados
+                  </OpcaoEscopo>
+                </div>
+              </div>
+            )}
+            
+            <CampoEditor titulo="Descrição">
+              <input
+                value={campos.descricao}
+                onChange={(event) =>
+                  setCampos((atual) => ({ ...atual, descricao: event.target.value }))
+                }
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+              />
+            </CampoEditor>
 
-                <select
-                  value={subcategoriaEdicaoId}
-                  onChange={(event) => setSubcategoriaEdicaoId(event.target.value)}
-                  className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-                >
-                  <option value="">Selecione</option>
-                  {subcategoriasEditor.map((subcategoria) => (
+            <CampoEditor titulo="Valor">
+              <input
+                value={campos.valor}
+                inputMode="numeric"
+                onChange={(event) =>
+                  setCampos((atual) => ({
+                    ...atual,
+                    valor: formatarCampoMoeda(event.target.value)
+                  }))
+                }
+                className="min-h-[52px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-center text-xl font-black text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+              />
+            </CampoEditor>
+
+            <CampoEditor titulo="Beneficiário">
+              <select
+                value={campos.beneficiario}
+                onChange={(event) =>
+                  setCampos((atual) => ({ ...atual, beneficiario: event.target.value }))
+                }
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+              >
+                <option value="PK">PK</option>
+                <option value="Grazi">Grazi</option>
+                <option value="Casal">Casal</option>
+              </select>
+            </CampoEditor>
+
+            <CampoEditor titulo="Competência">
+              <input
+                type="date"
+                value={campos.dataCompetencia}
+                onChange={(event) => {
+                  const novaData = event.target.value
+
+                  setCampos((atual) => {
+                    const cartaoSelecionado = cartoes.find(
+                      (cartao) => Number(cartao.id) === Number(atual.cartaoId)
+                    )
+
+                    return {
+                      ...atual,
+                      dataCompetencia: novaData,
+                      faturaRef:
+                        atual.metodoPagamento === 'cartao'
+                          ? calcularFaturaEditor(novaData, cartaoSelecionado)
+                          : atual.faturaRef
+                    }
+                  })
+                }}
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+              />
+            </CampoEditor>
+
+            <CampoEditor titulo="Status">
+              <select
+                value={campos.status}
+                onChange={(event) =>
+                  setCampos((atual) => ({ ...atual, status: event.target.value }))
+                }
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+              >
+                <option value="pendente">Pendente</option>
+                <option value="pago">Pago</option>
+              </select>
+            </CampoEditor>
+
+            <CampoEditor titulo="Categoria">
+              <select
+                value={campos.categoriaId}
+                onChange={(event) =>
+                  setCampos((atual) => ({
+                    ...atual,
+                    categoriaId: event.target.value,
+                    subcategoriaId: ''
+                  }))
+                }
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+              >
+                <option value="">Selecione</option>
+                {categorias.map((categoria) => (
+                  <option key={categoria.id} value={categoria.id}>
+                    {categoria.nome}
+                  </option>
+                ))}
+              </select>
+            </CampoEditor>
+
+            <CampoEditor titulo="Subcategoria">
+              <select
+                value={campos.subcategoriaId}
+                disabled={!campos.categoriaId}
+                onChange={(event) =>
+                  setCampos((atual) => ({ ...atual, subcategoriaId: event.target.value }))
+                }
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none disabled:opacity-50"
+              >
+                <option value="">
+                  {campos.categoriaId ? 'Selecione' : 'Escolha uma categoria primeiro'}
+                </option>
+
+                {subcategorias
+                  .filter((subcategoria) => {
+                    const categoriaSelecionada = categorias.find(
+                      (categoria) => Number(categoria.id) === Number(campos.categoriaId)
+                    )
+
+                    if (!categoriaSelecionada) return false
+
+                    return (
+                      subcategoria.categoriaUuid === categoriaSelecionada.uuid ||
+                      Number(subcategoria.categoriaId) === Number(categoriaSelecionada.id)
+                    )
+                  })
+                  .map((subcategoria) => (
                     <option key={subcategoria.id} value={subcategoria.id}>
                       {subcategoria.nome}
                     </option>
                   ))}
-                </select>
-              </label>
-            </>
-          )}
+              </select>
+            </CampoEditor>
 
-          {possuiRelacionados && (
-            <div className="rounded-3xl border border-[#1C3D2E] bg-black/35 p-2">
-              <p className="mb-2 px-2 text-xs font-black text-[#91A99C]">
-                Deseja alterar:
-              </p>
+            <CampoEditor titulo="Forma de pagamento">
+              <select
+                value={campos.metodoPagamento}
+                onChange={(event) => {
+                  const novoMetodo = event.target.value
 
-              <div className="grid gap-2">
-                <OpcaoEscopo
-                  ativo={escopoEdicao === 'este'}
-                  onClick={() => setEscopoEdicao('este')}
-                >
-                  Somente este lançamento
-                </OpcaoEscopo>
+                  setCampos((atual) => {
+                    const cartaoSelecionado = cartoes.find(
+                      (cartao) => Number(cartao.id) === Number(atual.cartaoId)
+                    )
 
-                {editor.tipo === 'valor' && (
-                  <OpcaoEscopo
-                    ativo={escopoEdicao === 'a_partir'}
-                    onClick={() => setEscopoEdicao('a_partir')}
+                    return {
+                      ...atual,
+                      metodoPagamento: novoMetodo,
+                      cartaoId: novoMetodo === 'cartao' ? atual.cartaoId : '',
+                      faturaRef:
+                        novoMetodo === 'cartao'
+                          ? calcularFaturaEditor(atual.dataCompetencia, cartaoSelecionado)
+                          : ''
+                    }
+                  })
+                }}
+                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
+              >
+                <option value="pix">PIX</option>
+                <option value="dinheiro">Dinheiro</option>
+                <option value="cartao">Cartão</option>
+              </select>
+            </CampoEditor>
+
+            {campos.metodoPagamento === 'cartao' && (
+              <>
+                <CampoEditor titulo="Cartão">
+                  <select
+                    value={campos.cartaoId}
+                    onChange={(event) => {
+                      const novoCartaoId = event.target.value
+
+                      setCampos((atual) => {
+                        const cartaoSelecionado = cartoes.find(
+                          (cartao) => Number(cartao.id) === Number(novoCartaoId)
+                        )
+
+                        return {
+                          ...atual,
+                          cartaoId: novoCartaoId,
+                          faturaRef: calcularFaturaEditor(atual.dataCompetencia, cartaoSelecionado)
+                        }
+                      })
+                    }}
+                    className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
                   >
-                    A partir deste lançamento
-                  </OpcaoEscopo>
-                )}
+                    <option value="">Selecione</option>
+                    {cartoes.map((cartao) => (
+                      <option key={cartao.id} value={cartao.id}>
+                        {cartao.nome}
+                      </option>
+                    ))}
+                  </select>
+                </CampoEditor>
 
-                <OpcaoEscopo
-                  ativo={escopoEdicao === 'todos'}
-                  onClick={() => setEscopoEdicao('todos')}
-                >
-                  Todos os lançamentos relacionados
-                </OpcaoEscopo>
-              </div>
-            </div>
-          )}
+                <CampoEditor titulo="Fatura">
+                  <input
+                    type="month"
+                    value={campos.faturaRef}
+                    onChange={(event) =>
+                      setCampos((atual) => ({ ...atual, faturaRef: event.target.value }))
+                    }
+                    className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
+                  />
+                </CampoEditor>
+              </>
+            )}
 
-          <button
-            onClick={onSalvar}
-            className="min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] text-sm font-black text-white shadow-[0_0_24px_rgba(58,242,161,0.22)] active:scale-[0.98]"
-          >
-            Salvar alteração
-          </button>
+            <CampoEditor titulo="Observações">
+              <textarea
+                value={campos.observacoes}
+                onChange={(event) =>
+                  setCampos((atual) => ({ ...atual, observacoes: event.target.value }))
+                }
+                placeholder="Informações adicionais"
+                className="min-h-[86px] w-full resize-none rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none placeholder:text-[#587367] focus:border-[#3AF2A1]"
+              />
+            </CampoEditor>
+        </div>
+        </div>
+        <div className="border-t border-[#1C3D2E] bg-[#03130C] p-4">
+            <button
+              onClick={onSalvar}
+              disabled={salvandoEditor}
+              className="min-h-[48px] w-full rounded-2xl bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] text-sm font-black text-white shadow-[0_0_24px_rgba(58,242,161,0.22)] active:scale-[0.98]"
+            >
+              {salvandoEditor ? 'Salvando...' : 'Salvar alterações'}
+            </button>
         </div>
       </div>
     </div>
+  )
+}
+
+function CampoEditor({ titulo, children }) {
+  return (
+    <label className="block">
+      <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
+        {titulo}
+      </span>
+
+      {children}
+    </label>
   )
 }
 
