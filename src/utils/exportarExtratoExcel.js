@@ -1,4 +1,4 @@
-import XlsxPopulate from 'xlsx-populate'
+import XlsxPopulate from 'xlsx-populate/browser/xlsx-populate'
 
 const CAMINHO_TEMPLATE = '/templates/extrato-financeiro.xlsx'
 const LINHA_INICIAL_EXTRATO = 5
@@ -371,26 +371,35 @@ const montarDescricaoFiltros = ({
     : 'Sem filtros adicionais'
 }
 
-const baixarArquivo = (
+const compartilharArquivo = async (
   blob,
   nomeArquivo
 ) => {
-  const url =
-    window.URL.createObjectURL(blob)
+  const arquivo = new File(
+    [blob],
+    nomeArquivo,
+    {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    }
+  )
 
-  const link =
-    document.createElement('a')
+  if (
+    !navigator.share ||
+    !navigator.canShare ||
+    !navigator.canShare({
+      files: [arquivo]
+    })
+  ) {
+    throw new Error(
+      'Este dispositivo não permite compartilhar arquivos diretamente. Abra o FinanceApp pelo celular ou pelo PWA instalado.'
+    )
+  }
 
-  link.href = url
-  link.download = nomeArquivo
-
-  document.body.appendChild(link)
-
-  link.click()
-
-  document.body.removeChild(link)
-
-  window.URL.revokeObjectURL(url)
+  await navigator.share({
+    title: 'Extrato Financeiro',
+    text: 'Extrato financeiro exportado pelo FinanceApp.',
+    files: [arquivo]
+  })
 }
 
 export async function exportarExtratoExcel({
@@ -483,8 +492,8 @@ export async function exportarExtratoExcel({
       filtros.mesAtual || 'periodo'
     ).replace(/[^0-9-]/g, '')
 
-  baixarArquivo(
-    blob,
-    `extrato-financeiro-${mesArquivo}.xlsx`
-  )
+  await compartilharArquivo(
+  blob,
+  `extrato-financeiro-${mesArquivo}.xlsx`
+)
 }
