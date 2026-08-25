@@ -9,6 +9,7 @@ import {
   CreditCard,
   Filter,
   Search,
+  Share2,
   Trash2,
   X,
   XCircle
@@ -20,6 +21,7 @@ import { CardPremium } from '../components/CardPremium'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
 import { formatarDataGrupo, normalizarDataCivil } from '../utils/datas'
+import { exportarExtratoExcel } from '../utils/exportarExtratoExcel'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -228,6 +230,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
   const [faturaExpandidaId, setFaturaExpandidaId] = useState(null)
+  const [compartilhandoExcel, setCompartilhandoExcel] = useState(false)
 
   const [modalPagamento, setModalPagamento] = useState(null)
   const [valorPagamentoFatura, setValorPagamentoFatura] = useState('')
@@ -618,6 +621,50 @@ cartao: lancamento.cartao,
     setFiltroCategoriaId('todos')
     setFiltroSubcategoriaId('todos')
   }
+
+  const compartilharExtratoExcel = async () => {
+  if (compartilhandoExcel) return
+
+  if (timelineExtrato.length === 0) {
+    alert('Não há lançamentos para compartilhar com os filtros atuais.')
+    return
+  }
+
+  setCompartilhandoExcel(true)
+
+  try {
+    await exportarExtratoExcel({
+      timelineExtrato,
+      categorias,
+      subcategorias,
+      cartoes,
+      filtros: {
+        mesAtual,
+        filtroTipo,
+        filtroPagamento,
+        filtroStatus,
+        filtroCategoriaId,
+        filtroSubcategoriaId,
+        filtroUsuarioId,
+        filtroCartaoId,
+        busca
+      }
+    })
+  } catch (err) {
+    if (err?.name === 'AbortError') {
+      return
+    }
+
+    console.error('Erro ao compartilhar Excel:', err)
+
+    alert(
+      err?.message ||
+      'Não foi possível gerar e compartilhar o arquivo.'
+    )
+  } finally {
+    setCompartilhandoExcel(false)
+  }
+}
 
   const limparFiltrosDetalhados = () => {
     setFiltro('todos')
@@ -1116,6 +1163,25 @@ cartao: lancamento.cartao,
           <ResumoTopo titulo="Despesas" valor={resumo.despesas} />
           <ResumoTopo titulo="Saldo" valor={resumo.saldo} positivo={resumo.saldo >= 0} semBorda />
         </div>
+
+        <button
+          type="button"
+          onClick={compartilharExtratoExcel}
+          disabled={compartilhandoExcel || timelineExtrato.length === 0}
+          className="
+            flex min-h-[44px] w-full items-center justify-center gap-2
+            rounded-2xl border border-[#1C3D2E] bg-black/45
+            text-sm font-black text-[#3AF2A1]
+            transition active:scale-[0.98]
+            disabled:cursor-not-allowed disabled:opacity-40
+          "
+        >
+          <Share2 size={18} />
+
+          {compartilhandoExcel
+            ? 'Preparando Excel...'
+            : 'Enviar Excel'}
+        </button>
       </CardPremium>
 
       <section className="space-y-3">
