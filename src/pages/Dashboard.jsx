@@ -364,61 +364,124 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 }, [categorias])
 
   const participacaoUsuarios = useMemo(() => {
-  const base = {
-    PK: {
-      nome: 'PK',
-      pago: 0,
-      aberto: 0
-    },
-    Grazi: {
-      nome: 'Grazi',
-      pago: 0,
-      aberto: 0
+    const base = {
+      PK: { nome: 'PK', pago: 0, aberto: 0 },
+      Grazi: { nome: 'Grazi', pago: 0, aberto: 0 }
     }
-  }
 
-  doMes
-    .filter((lancamento) => lancamento.tipo === 'despesa')
-    .forEach((lancamento) => {
-      const chaveUsuario = obterChaveUsuarioLancamento(lancamento, usuarios || [])
+    const despesasMes = doMes.filter(
+      (lancamento) => lancamento.tipo === 'despesa'
+    )
 
-      if (!chaveUsuario || !base[chaveUsuario]) return
+    despesasMes
+      .filter((lancamento) => lancamento.metodoPagamento !== 'cartao')
+      .forEach((lancamento) => {
+        const chaveUsuario = obterChaveUsuarioLancamento(
+          lancamento,
+          usuarios || []
+        )
 
-      const valor = Number(lancamento.valor || 0)
+        if (!chaveUsuario || !base[chaveUsuario]) return
 
-      const estaPago =
-        lancamento.metodoPagamento === 'cartao'
-          ? Boolean(lancamento.faturaFechada)
-          : lancamento.status === 'pago'
+        const valor = Number(lancamento.valor || 0)
 
-      if (estaPago) {
-        base[chaveUsuario].pago += valor
-      } else {
-        base[chaveUsuario].aberto += valor
+        if (lancamento.status === 'pago') {
+          base[chaveUsuario].pago += valor
+        } else {
+          base[chaveUsuario].aberto += valor
+        }
+      })
+
+    const faturas = new Map()
+
+    despesasMes
+      .filter((lancamento) => lancamento.metodoPagamento === 'cartao')
+      .forEach((lancamento) => {
+        const chaveUsuario = obterChaveUsuarioLancamento(
+          lancamento,
+          usuarios || []
+        )
+
+        if (!chaveUsuario || !base[chaveUsuario]) return
+
+        const chaveCartao =
+          lancamento.cartaoUuid ||
+          lancamento.cartaoId ||
+          'sem-cartao'
+
+        const faturaRef = lancamento.faturaRef || mesReferencia
+        const chaveFatura = `${chaveCartao}-${faturaRef}`
+
+        if (!faturas.has(chaveFatura)) {
+          faturas.set(chaveFatura, {
+            total: 0,
+            valorPago: 0,
+            valoresPorUsuario: {
+              PK: 0,
+              Grazi: 0
+            }
+          })
+        }
+
+        const fatura = faturas.get(chaveFatura)
+        const valor = Number(lancamento.valor || 0)
+
+        fatura.total += valor
+        fatura.valoresPorUsuario[chaveUsuario] += valor
+
+        fatura.valorPago = Math.max(
+          fatura.valorPago,
+          Number(lancamento.faturaValorPago || 0)
+        )
+      })
+
+    faturas.forEach((fatura) => {
+      if (fatura.total <= 0) return
+
+      const valorPagoEfetivo = Math.min(
+        Math.max(Number(fatura.valorPago || 0), 0),
+        fatura.total
+      )
+
+      Object.entries(fatura.valoresPorUsuario).forEach(
+        ([chaveUsuario, totalUsuario]) => {
+          if (!base[chaveUsuario] || totalUsuario <= 0) return
+
+          const participacaoUsuario = totalUsuario / fatura.total
+          const pagoUsuario = valorPagoEfetivo * participacaoUsuario
+          const abertoUsuario = Math.max(totalUsuario - pagoUsuario, 0)
+
+          base[chaveUsuario].pago += pagoUsuario
+          base[chaveUsuario].aberto += abertoUsuario
+        }
+      )
+    })
+
+    const lista = Object.values(base).map((usuario) => {
+      const total = usuario.pago + usuario.aberto
+
+      return {
+        ...usuario,
+        total,
+        percentualPago: total > 0 ? (usuario.pago / total) * 100 : 0,
+        percentualAberto: total > 0 ? (usuario.aberto / total) * 100 : 0
       }
     })
 
-  const lista = Object.values(base).map((usuario) => {
-    const total = usuario.pago + usuario.aberto
+    const totalGeral = lista.reduce(
+      (total, usuario) => total + usuario.total,
+      0
+    )
 
     return {
-      ...usuario,
-      total,
-      percentualPago: total > 0 ? (usuario.pago / total) * 100 : 0,
-      percentualAberto: total > 0 ? (usuario.aberto / total) * 100 : 0
+      totalGeral,
+      usuarios: lista.map((usuario) => ({
+        ...usuario,
+        percentualTotal:
+          totalGeral > 0 ? (usuario.total / totalGeral) * 100 : 0
+      }))
     }
-  })
-
-  const totalGeral = lista.reduce((total, usuario) => total + usuario.total, 0)
-
-  return {
-    totalGeral,
-    usuarios: lista.map((usuario) => ({
-      ...usuario,
-      percentualTotal: totalGeral > 0 ? (usuario.total / totalGeral) * 100 : 0
-    }))
-  }
-}, [doMes, usuarios])
+  }, [doMes, usuarios, mesReferencia])
 
   const gastosPorCategoria = useMemo(() => {
     if (!categorias) return []
