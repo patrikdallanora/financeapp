@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 
 export const db = new Dexie('FinanceAppDB')
 
-const schema = {
+const schemaV4 = {
   usuarios: '++id, uuid, nome, createdAt, updatedAt, deletedAt, syncStatus',
 
   cartoes:
@@ -28,10 +28,17 @@ const schema = {
     '++id, tabela, uuid, action, timestamp, deviceId, resolved'
 }
 
-db.version(1).stores(schema)
+const schemaV5 = {
+  ...schemaV4,
+
+  lancamentos:
+    '++id, uuid, tipo, usuarioId, usuarioUuid, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, cartaoUuid, faturaRef, categoriaId, categoriaUuid, subcategoriaId, subcategoriaUuid, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus'
+}
+
+db.version(1).stores(schemaV4)
 
 db.version(2)
-  .stores(schema)
+  .stores(schemaV4)
   .upgrade(async (tx) => {
     const mapaLegado = {
       '🍔': 'utensils',
@@ -57,10 +64,10 @@ db.version(2)
   })
 
 
-db.version(3).stores(schema)
+db.version(3).stores(schemaV4)
 
 db.version(4)
-  .stores(schema)
+  .stores(schemaV4)
   .upgrade(async (tx) => {
     const categorias = await tx.table('categorias').toArray()
     const subcategorias = await tx.table('subcategorias').toArray()
@@ -118,6 +125,8 @@ db.version(4)
   subcategoria.syncStatus = 'pending'
 })
   })
+
+  db.version(5).stores(schemaV5)
 
 export const gerarUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {

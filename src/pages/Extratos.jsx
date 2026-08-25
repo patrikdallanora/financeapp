@@ -242,7 +242,6 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [camposEditorLancamento, setCamposEditorLancamento] = useState({
     descricao: '',
     valor: '',
-    beneficiario: 'PK',
     dataCompetencia: '',
     status: 'pendente',
     categoriaId: '',
@@ -822,7 +821,6 @@ cartao: lancamento.cartao,
     setCamposEditorLancamento({
       descricao: lancamento.descricao || '',
       valor: formatarCampoMoeda(String(Math.round(Number(lancamento.valor || 0) * 100))),
-      beneficiario: lancamento.beneficiario || 'PK',
       dataCompetencia: normalizarDataCivil(lancamento.dataCompetencia) || '',
       status: lancamento.status || 'pendente',
       categoriaId: String(lancamento.categoriaId || ''),
@@ -902,7 +900,6 @@ cartao: lancamento.cartao,
     const alteracoes = {
       descricao: descricaoFinal,
       valor: valorFinal,
-      beneficiario: camposEditorLancamento.beneficiario || 'PK',
       dataCompetencia: camposEditorLancamento.dataCompetencia,
       status: statusFinal,
       dataPagamento: statusFinal === 'pago' ? new Date().toISOString().slice(0, 10) : null,
@@ -1785,20 +1782,6 @@ function ModalEditorLancamento({
                 }
                 className="min-h-[52px] w-full rounded-2xl border border-[#1C3D2E] bg-black/45 px-4 py-3 text-center text-xl font-black text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
               />
-            </CampoEditor>
-
-            <CampoEditor titulo="Beneficiário">
-              <select
-                value={campos.beneficiario}
-                onChange={(event) =>
-                  setCampos((atual) => ({ ...atual, beneficiario: event.target.value }))
-                }
-                className="min-h-[48px] w-full rounded-2xl border border-[#1C3D2E] bg-[#030504] px-4 py-3 text-sm font-semibold text-[#F4FFF8] outline-none"
-              >
-                <option value="PK">PK</option>
-                <option value="Grazi">Grazi</option>
-                <option value="Casal">Casal</option>
-              </select>
             </CampoEditor>
 
             <CampoEditor titulo="Competência">

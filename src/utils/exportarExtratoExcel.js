@@ -101,7 +101,6 @@ const montarLinhasExportacao = (timelineExtrato) => {
           categoria: '',
           subcategoria: '',
           parcela: '',
-          beneficiario: '',
           metodoPagamento: 'Cartão',
           valor: null,
           situacao: formatarSituacaoFatura(fatura),
@@ -116,7 +115,6 @@ const montarLinhasExportacao = (timelineExtrato) => {
             categoria: lancamento.categoria?.nome || '',
             subcategoria: lancamento.subcategoria?.nome || '',
             parcela: formatarParcela(lancamento),
-            beneficiario: lancamento.beneficiario || '',
             metodoPagamento: formatarMetodoPagamentoExcel(
               lancamento.metodoPagamento
             ),
@@ -138,7 +136,6 @@ const montarLinhasExportacao = (timelineExtrato) => {
         categoria: lancamento.categoria?.nome || '',
         subcategoria: lancamento.subcategoria?.nome || '',
         parcela: formatarParcela(lancamento),
-        beneficiario: lancamento.beneficiario || '',
         metodoPagamento: formatarMetodoPagamentoExcel(
           lancamento.metodoPagamento
         ),
@@ -169,7 +166,7 @@ const obterCategoriasDisponiveis = (categorias) => {
 
 const limparExtrato = (planilha) => {
   planilha
-    .range(`A${LINHA_INICIAL_EXTRATO}:K2004`)
+    .range(`A${LINHA_INICIAL_EXTRATO}:J2004`)
     .clear({
       contentsOnly: true
     })
@@ -184,7 +181,6 @@ const preencherExtrato = (planilha, linhas) => {
     linha.categoria,
     linha.subcategoria,
     linha.parcela,
-    linha.beneficiario,
     linha.metodoPagamento,
     linha.valor,
     linha.situacao,
@@ -197,13 +193,13 @@ const preencherExtrato = (planilha, linhas) => {
 
   planilha
     .range(
-      `A${LINHA_INICIAL_EXTRATO}:K${linhaFinal}`
+      `A${LINHA_INICIAL_EXTRATO}:J${linhaFinal}`
     )
     .value(valores)
 
   planilha
     .range(
-      `H${LINHA_INICIAL_EXTRATO}:H${linhaFinal}`
+      `G${LINHA_INICIAL_EXTRATO}:G${linhaFinal}`
     )
     .style('numberFormat', 'R$ #,##0.00')
 
@@ -213,7 +209,7 @@ const preencherExtrato = (planilha, linhas) => {
 
     if (linha.tipoLinha === 'Fatura') {
       planilha
-        .range(`A${numeroLinha}:K${numeroLinha}`)
+        .range(`A${numeroLinha}:J${numeroLinha}`)
         .style({
           bold: true,
           fill: 'E2E8F0'
