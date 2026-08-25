@@ -339,6 +339,30 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
   const saldo = totalReceitas - totalDespesas
 
+  const coresParticipacaoUsuarios = useMemo(() => {
+  const encontrarCorCategoria = (...nomes) => {
+    const categoria = (categorias || []).find((item) =>
+      nomes.includes(normalizarTexto(item.nome))
+    )
+
+    return categoria?.cor || null
+  }
+
+  return {
+    aberto:
+      encontrarCorCategoria('casamento') ||
+      '#EF6B6B',
+
+    PK:
+      encontrarCorCategoria('investimento', 'investimentos') ||
+      '#3B82F6',
+
+    Grazi:
+      encontrarCorCategoria('carro') ||
+      '#60A5FA'
+  }
+}, [categorias])
+
   const participacaoUsuarios = useMemo(() => {
   const base = {
     PK: {
@@ -542,7 +566,10 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
         onSelecionarCategoria={abrirCategoriaNoExtrato}
       />
 
-      <CardParticipacaoUsuarios dados={participacaoUsuarios} />
+      <CardParticipacaoUsuarios
+        dados={participacaoUsuarios}
+        cores={coresParticipacaoUsuarios}
+      />
 
       <CardMetasDashboard metas={metasDashboard} />
 
@@ -624,9 +651,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 function CardParticipacaoUsuarios({
   dados,
   titulo = 'Gastos por pessoa',
-  corAberto = 'bg-yellow-500/90',
-  corPago = 'bg-[#3AF2A1]',
-  corTextoPago = 'text-[#021A10]'
+  cores = {}
 }) {
   const usuarios = dados?.usuarios || []
   const totalGeral = dados?.totalGeral || 0
@@ -659,12 +684,11 @@ function CardParticipacaoUsuarios({
       <div className="space-y-4 p-4">
         {usuarios.map((usuario) => (
           <BarraUsuarioFinanceiro
-  key={usuario.nome}
-  usuario={usuario}
-  corAberto={corAberto}
-  corPago={corPago}
-  corTextoPago={corTextoPago}
-/>
+            key={usuario.nome}
+            usuario={usuario}
+            corAberto={cores.aberto}
+            corPago={cores[usuario.nome]}
+          />
         ))}
       </div>
     </section>
@@ -693,9 +717,8 @@ function IndicadorUsuario({ titulo, valor, subtitulo }) {
 
 function BarraUsuarioFinanceiro({
   usuario,
-  corAberto = 'bg-yellow-500/90',
-  corPago = 'bg-[#3AF2A1]',
-  corTextoPago = 'text-[#021A10]'
+  corAberto = '#EF6B6B',
+  corPago = '#3B82F6'
 }) {
   const total = usuario.total || 0
   const aberto = usuario.aberto || 0
@@ -721,26 +744,38 @@ function BarraUsuarioFinanceiro({
 
       <div className="flex h-9 overflow-hidden rounded-2xl bg-[#102018]">
         <div
-          className={`flex items-center justify-center ${corAberto} px-2 text-[10px] font-black text-black transition-all`}
-          style={{ width: `${Math.max(usuario.percentualAberto, aberto > 0 ? 8 : 0)}%` }}
+          className="flex items-center justify-center px-2 text-[10px] font-black text-white transition-all"
+          style={{
+            width: `${Math.max(usuario.percentualAberto, aberto > 0 ? 8 : 0)}%`,
+            backgroundColor: corAberto
+          }}
         >
           {aberto > 0 && `${formatarMoeda(aberto)} · ${formatarPercentual(usuario.percentualAberto)}`}
         </div>
 
         <div
-          className={`flex items-center justify-center ${corPago} px-2 text-[10px] font-black ${corTextoPago} transition-all`}
-          style={{ width: `${Math.max(usuario.percentualPago, pago > 0 ? 8 : 0)}%` }}
+          className="flex items-center justify-center px-2 text-[10px] font-black text-white transition-all"
+          style={{
+            width: `${Math.max(usuario.percentualPago, pago > 0 ? 8 : 0)}%`,
+            backgroundColor: corPago
+          }}
         >
           {pago > 0 && `${formatarMoeda(pago)} · ${formatarPercentual(usuario.percentualPago)}`}
         </div>
       </div>
 
       <div className="mt-2 grid grid-cols-2 gap-2 text-[11px] font-semibold">
-        <p className="text-yellow-300">
+        <p
+          className="font-semibold"
+          style={{ color: corAberto }}
+        >
           Em aberto: {formatarMoeda(aberto)}
         </p>
 
-        <p className="text-right text-[#3AF2A1]">
+        <p
+          className="text-right font-semibold"
+          style={{ color: corPago }}
+        >
           Pago: {formatarMoeda(pago)}
         </p>
       </div>
