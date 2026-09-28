@@ -33,3 +33,12 @@
 .dashboard-evolucao>.card-premium{background:#101b15;border:1px solid #25362c;box-shadow:none}
 .dashboard-evolucao button:focus-visible,.dashboard-evolucao select:focus-visible{outline:2px solid #3af2a1;outline-offset:3px}
 @media(prefers-reduced-motion:reduce){.dashboard-evolucao .home-barra{transition:none}}
+
+.dashboard-evolucao :is(small,span)[data-comparacao="melhor"]{color:#3af2a1}
+.dashboard-evolucao :is(small,span)[data-comparacao="pior"]{color:#f58b98}
+.dashboard-evolucao :is(small,span)[data-comparacao="neutro"]{color:#9aafa1}
+.dashboard-evolucao .home-barra[data-comparacao="melhor"]{background:#3af2a1}
+.dashboard-evolucao .home-barra[data-comparacao="pior"]{background:#f58b98}
+.dashboard-evolucao .home-barra[data-comparacao="neutro"]{background:#9aafa1}
+.dashboard-evolucao .home-novo-flutuante{position:fixed;right:max(20px,calc((100vw - 430px)/2 + 20px));bottom:calc(88px + env(safe-area-inset-bottom,0px));z-index:30;display:flex;align-items:center;justify-content:center;width:60px;height:60px;border-radius:22px;background:#3af2a1;color:#062016;box-shadow:0 8px 28px #0008,0 0 18px #3af2a133}
+.dashboard-evolucao .home-novo-flutuante:active{transform:scale(.95)}

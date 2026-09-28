@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mesAnterior, selecionarLancamentosMes, resumirMes, compararCategorias, variacaoMensal } from '../src/utils/comparacaoMensal.js'
+import { mesAnterior, selecionarLancamentosMes, resumirMes, compararCategorias, variacaoMensal, avaliarComparacao } from '../src/utils/comparacaoMensal.js'
 const categorias=[{id:1,uuid:'c1',nome:'Casa'},{id:2,uuid:'c2',nome:'Reembolsos'},{id:3,uuid:'c3',nome:'Lazer'}]
 test('mês imediatamente anterior, inclusive virada do ano',()=>{
  assert.equal(mesAnterior('2026-01'),'2025-12');assert.equal(mesAnterior('2026-09'),'2026-08')
@@ -22,4 +22,17 @@ test('categorias incluem as do mês anterior, com zero atual e participação co
 })
 test('percentuais lidam com ausência, base zero e saldo negativo',()=>{
  assert.equal(variacaoMensal(100,0,false),'Sem histórico');assert.equal(variacaoMensal(100,0),'Sem base percentual');assert.equal(variacaoMensal(0,0),'Sem variação');assert.equal(variacaoMensal(100,-100),'+200%');assert.equal(variacaoMensal(-200,-100),'-100%')
+})
+
+test('melhora e piora seguem o significado financeiro, inclusive saldos negativos e base zero',()=>{
+ assert.equal(avaliarComparacao(80,100,'despesa'),'melhor')
+ assert.equal(avaliarComparacao(120,100,'despesa'),'pior')
+ assert.equal(avaliarComparacao(80,100,'receita'),'pior')
+ assert.equal(avaliarComparacao(120,100,'receita'),'melhor')
+ assert.equal(avaliarComparacao(-80,-100,'saldo'),'melhor')
+ assert.equal(avaliarComparacao(-120,-100,'saldo'),'pior')
+ assert.equal(avaliarComparacao(0,0,'saldo'),'neutro')
+ assert.equal(avaliarComparacao(50,0,'receita'),'melhor')
+ assert.equal(avaliarComparacao(50,0,'despesa'),'pior')
+ assert.equal(avaliarComparacao(50,0,'receita',false),'neutro')
 })

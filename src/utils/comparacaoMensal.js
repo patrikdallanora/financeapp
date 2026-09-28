@@ -47,3 +47,10 @@ export const variacaoMensal = (atual, anterior, temDados = true) => {
   if (Math.abs(percentual) < 0.05) return 'Sem variação'
   return `${percentual > 0 ? '+' : ''}${percentual.toLocaleString('pt-BR', { maximumFractionDigits: 1 })}%`
 }
+
+// A melhora depende do indicador: despesas menores, receitas/saldo maiores.
+export const avaliarComparacao = (atual, anterior, indicador, temDados = true) => {
+  const diferenca = Math.round(atual * 100) - Math.round(anterior * 100)
+  if (!temDados || diferenca === 0) return 'neutro'
+  return (indicador === 'despesa' ? diferenca < 0 : diferenca > 0) ? 'melhor' : 'pior'
+}

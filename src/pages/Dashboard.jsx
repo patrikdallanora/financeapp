@@ -481,7 +481,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   }
 
   return (
-    <div className="dashboard-evolucao relative space-y-4 pb-24">
+    <div className="dashboard-evolucao relative space-y-4 pb-44">
       <header className="mb-4">
         <p className="mb-1 text-xs font-black uppercase tracking-[0.24em] text-[#3AF2A1]">
           FinanceApp
@@ -512,6 +512,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
       <div className="grid grid-cols-3 gap-2">
         <CardResumo
           titulo="Receitas"
+          indicador="receita"
           anterior={resumoAnterior.receita}
           temAnterior={resumoAnterior.temDados}
           referenciaAnterior={referenciaAnterior}
@@ -527,6 +528,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
         <CardResumo
           titulo="Despesas"
+          indicador="despesa"
           anterior={resumoAnterior.despesa}
           temAnterior={resumoAnterior.temDados}
           referenciaAnterior={referenciaAnterior}
@@ -542,6 +544,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
         <CardResumo
           titulo="Saldo"
+          indicador="saldo"
           anterior={resumoAnterior.saldo}
           temAnterior={resumoAnterior.temDados}
           referenciaAnterior={referenciaAnterior}
@@ -637,9 +640,11 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
       <button
         onClick={() => setMenuAberto(true)}
-        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#3AF2A1] font-bold text-[#062016] active:scale-95"
+        className="home-novo-flutuante"
+        aria-label="Novo lançamento"
+        aria-expanded={menuAberto}
       >
-        <Plus size={22} /> Novo lançamento
+        <Plus size={28} aria-hidden="true" />
       </button>
     </div>
   )
