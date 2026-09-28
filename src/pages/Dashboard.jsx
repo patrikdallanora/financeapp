@@ -5,7 +5,6 @@ import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowDown,
   ArrowUp,
-  CreditCard,
   Plus,
   X
 } from 'lucide-react'
@@ -611,25 +610,12 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
               <OpcaoLancamento
                 icone={ArrowDown}
                 titulo="Despesa"
-                subtitulo="Saída via PIX ou dinheiro"
+                subtitulo="PIX, dinheiro ou cartão"
                 cor="#F43F5E"
                 onClick={() =>
                   escolherLancamento({
                     tipo: 'despesa',
                     metodoPagamento: 'pix'
-                  })
-                }
-              />
-
-              <OpcaoLancamento
-                icone={CreditCard}
-                titulo="Despesa cartão"
-                subtitulo="Compra vinculada à fatura"
-                cor="#3B82F6"
-                onClick={() =>
-                  escolherLancamento({
-                    tipo: 'despesa',
-                    metodoPagamento: 'cartao'
                   })
                 }
               />
