@@ -1,3 +1,4 @@
+import { confirmarRegistroEnviado } from './confirmarRegistroEnviado.js'
 import { db } from '../db/database'
 
 const API_URL = import.meta.env.VITE_SHEETS_API_URL
@@ -352,9 +353,8 @@ export const pushSync = async () => {
           await db[tabela]
             .where('uuid')
             .equals(item.uuid)
-            .modify({
-              syncStatus: 'synced',
-              lastSyncedAt: agoraSync
+            .modify((local) => {
+              confirmarRegistroEnviado(local, item, agoraSync)
             })
         }
 

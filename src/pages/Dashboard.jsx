@@ -1,36 +1,21 @@
+import { CardResumo, CardAnaliseCategorias, ComparacaoMensal } from '../components/DashboardComparativo'
+import { mesAnterior, selecionarLancamentosMes, resumirMes, compararCategorias } from '../utils/comparacaoMensal.js'
 import { useMemo, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import {
   ArrowDown,
   ArrowUp,
-  BarChart3,
   CreditCard,
-  List,
   Plus,
   X
 } from 'lucide-react'
 
 import { db } from '../db/database'
-import { IconeCategoria } from '../components/IconeCategoria'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
     style: 'currency',
     currency: 'BRL'
-  })
-}
-
-const formatarNumeroCurto = (valor) => {
-  const numero = Number(valor || 0)
-
-  if (numero >= 1000) {
-    return `${(numero / 1000).toLocaleString('pt-BR', {
-      maximumFractionDigits: 1
-    })} mil`
-  }
-
-  return numero.toLocaleString('pt-BR', {
-    maximumFractionDigits: 0
   })
 }
 
@@ -114,14 +99,6 @@ const obterMesReferenciaDashboard = (cartoes = []) => {
   const dataReferencia = new Date(anoAtual, mesReferencia, 1)
 
   return dataReferencia.toISOString().slice(0, 7)
-}
-
-const formatarNomeMes = (mesRef) => {
-  const [ano, mes] = mesRef.split('-').map(Number)
-  const data = new Date(ano, mes - 1, 1)
-  const nomeMes = data.toLocaleDateString('pt-BR', { month: 'long' })
-
-  return nomeMes.charAt(0).toUpperCase() + nomeMes.slice(1)
 }
 
 const formatarMesSelect = (mesRef) => {
@@ -286,9 +263,6 @@ const [mesSelecionado, setMesSelecionado] = useState('')
 
 const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
-  const nomeMesReferencia = useMemo(() => {
-    return formatarNomeMes(mesReferencia)
-  }, [mesReferencia])
 
   const opcoesMeses = useMemo(() => {
   const meses = new Set()
@@ -311,33 +285,12 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   return Array.from(meses).sort((a, b) => b.localeCompare(a))
 }, [lancamentos, mesReferenciaPadrao])
 
-  const doMes = useMemo(() => {
-    if (!lancamentos || !categorias) return []
-
-    return lancamentos
-      .filter((lancamento) => {
-        if (lancamento.metodoPagamento === 'cartao') {
-          return String(lancamento.faturaRef || '').startsWith(mesReferencia)
-        }
-
-        return String(lancamento.dataCompetencia || '').startsWith(mesReferencia)
-      })
-      .filter((lancamento) => {
-        const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
-
-        return !categoriaEhReembolso(categoria)
-      })
-  }, [lancamentos, categorias, mesReferencia])
-
-  const totalReceitas = doMes
-    .filter((lancamento) => lancamento.tipo === 'receita')
-    .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
-
-  const totalDespesas = doMes
-    .filter((lancamento) => lancamento.tipo === 'despesa')
-    .reduce((total, lancamento) => total + Number(lancamento.valor || 0), 0)
-
-  const saldo = totalReceitas - totalDespesas
+  const referenciaAnterior = mesAnterior(mesReferencia)
+  const doMes = useMemo(() => selecionarLancamentosMes(lancamentos || [], categorias || [], mesReferencia), [lancamentos, categorias, mesReferencia])
+  const doMesAnterior = useMemo(() => selecionarLancamentosMes(lancamentos || [], categorias || [], referenciaAnterior), [lancamentos, categorias, referenciaAnterior])
+  const resumoAtual = useMemo(() => resumirMes(doMes), [doMes])
+  const resumoAnterior = useMemo(() => resumirMes(doMesAnterior), [doMesAnterior])
+  const { receita: totalReceitas, despesa: totalDespesas, saldo } = resumoAtual
 
   const coresParticipacaoUsuarios = useMemo(() => {
   const encontrarCorCategoria = (...nomes) => {
@@ -483,41 +436,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
     }
   }, [doMes, usuarios, mesReferencia])
 
-  const gastosPorCategoria = useMemo(() => {
-    if (!categorias) return []
-
-    const mapa = new Map()
-
-    doMes
-      .filter((lancamento) => lancamento.tipo === 'despesa')
-      .forEach((lancamento) => {
-        const categoria = encontrarCategoriaDoLancamento(categorias, lancamento)
-
-        if (!categoria) return
-        if (categoriaEhReembolso(categoria)) return
-
-        const chave = Number(categoria.id)
-        const atual = mapa.get(chave) || {
-          id: categoria.id,
-          nome: categoria.nome,
-          cor: categoria.cor,
-          icone: categoria.icone,
-          total: 0
-        }
-
-        atual.total += Number(lancamento.valor || 0)
-        mapa.set(chave, atual)
-      })
-
-    const lista = Array.from(mapa.values()).sort((a, b) => b.total - a.total)
-    const maiorValor = lista[0]?.total || 0
-
-    return lista.map((item) => ({
-      ...item,
-      percentual: totalDespesas > 0 ? (item.total / totalDespesas) * 100 : 0,
-      largura: maiorValor > 0 ? (item.total / maiorValor) * 100 : 0
-    }))
-  }, [doMes, categorias, totalDespesas])
+  const gastosPorCategoria = useMemo(() => compararCategorias(doMes, doMesAnterior, categorias || []), [doMes, doMesAnterior, categorias])
 
   const metasDashboard = useMemo(() => {
     if (!metas || !lancamentos || !categorias) return []
@@ -562,7 +481,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
   }
 
   return (
-    <div className="relative space-y-4 pb-24">
+    <div className="dashboard-evolucao relative space-y-4 pb-24">
       <header className="mb-4">
         <p className="mb-1 text-xs font-black uppercase tracking-[0.24em] text-[#3AF2A1]">
           FinanceApp
@@ -572,13 +491,14 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
           Dashboard
         </h1>
 
-        <p className="mt-1 flex items-center gap-1 text-sm text-[#91A99C]">
+        <p className="mt-3 flex flex-wrap items-center justify-between gap-2 text-xs text-[#91A99C]">
   <span>Resumo financeiro de</span>
 
   <select
+    aria-label="Mês de referência"
     value={mesReferencia}
     onChange={(event) => setMesSelecionado(event.target.value)}
-    className="h-[22px] max-w-[92px] rounded-full border border-[#1C2A24] bg-[#07100B] px-2 text-[11px] font-black leading-none text-[#3AF2A1] outline-none"
+    className="min-h-[44px] rounded-xl border border-[#25362c] bg-[#101b15] px-3 text-sm text-[#F4FFF8]"
   >
     {opcoesMeses.map((mes) => (
       <option key={mes} value={mes}>
@@ -592,6 +512,9 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
       <div className="grid grid-cols-3 gap-2">
         <CardResumo
           titulo="Receitas"
+          anterior={resumoAnterior.receita}
+          temAnterior={resumoAnterior.temDados}
+          referenciaAnterior={referenciaAnterior}
           valor={totalReceitas}
           tipo="positivo"
           onClick={() =>
@@ -604,6 +527,9 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
         <CardResumo
           titulo="Despesas"
+          anterior={resumoAnterior.despesa}
+          temAnterior={resumoAnterior.temDados}
+          referenciaAnterior={referenciaAnterior}
           valor={totalDespesas}
           tipo="negativo"
           onClick={() =>
@@ -616,12 +542,20 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
         <CardResumo
           titulo="Saldo"
+          anterior={resumoAnterior.saldo}
+          temAnterior={resumoAnterior.temDados}
+          referenciaAnterior={referenciaAnterior}
           valor={saldo}
           tipo={saldo >= 0 ? 'positivo' : 'negativo'}
         />
       </div>
 
+      <ComparacaoMensal atual={resumoAtual} anterior={resumoAnterior} referencia={mesReferencia} referenciaAnterior={referenciaAnterior} />
+
       <CardAnaliseCategorias
+        referencia={mesReferencia}
+        referenciaAnterior={referenciaAnterior}
+        temAnterior={resumoAnterior.temDados}
         modo={modoCategorias}
         setModo={setModoCategorias}
         categorias={gastosPorCategoria}
@@ -703,9 +637,9 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
 
       <button
         onClick={() => setMenuAberto(true)}
-        className="fixed bottom-24 right-5 z-30 flex h-16 w-16 items-center justify-center rounded-[24px] bg-gradient-to-br from-[#3AF2A1] via-[#0F9D58] to-[#021A10] text-white glow-verde active:scale-95"
+        className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-2xl bg-[#3AF2A1] font-bold text-[#062016] active:scale-95"
       >
-        <Plus size={30} />
+        <Plus size={22} /> Novo lançamento
       </button>
     </div>
   )
@@ -915,248 +849,6 @@ function CardMetasDashboard({ metas }) {
         })}
       </div>
     </section>
-  )
-}
-
-function CardResumo({ titulo, valor, tipo, onClick }) {
-  const positivo = tipo === 'positivo'
-  const Component = onClick ? 'button' : 'div'
-
-  return (
-    <Component
-      onClick={onClick}
-      className={`
-        card-premium min-w-0 rounded-[22px] px-2.5 py-3 text-left
-        ${onClick ? 'transition active:scale-[0.99]' : ''}
-      `}
-    >
-      <p className="truncate text-[10px] font-semibold text-[#91A99C]">
-        {titulo}
-      </p>
-
-      <p
-        className={`mt-1 truncate text-[13px] font-black leading-4 ${
-          positivo ? 'text-[#3AF2A1]' : 'text-red-300'
-        }`}
-      >
-        {formatarMoeda(valor)}
-      </p>
-    </Component>
-  )
-}
-
-function CardAnaliseCategorias({
-  modo,
-  setModo,
-  categorias,
-  total,
-  onSelecionarCategoria
-}) {
-  return (
-    <section className="card-premium overflow-hidden rounded-[28px] p-0">
-      <div className="flex items-start justify-between gap-3 border-b border-[#1C2A24] p-4">
-        <div>
-          <p className="text-xs font-black uppercase tracking-[0.22em] text-[#3AF2A1]">
-            Análise
-          </p>
-
-          <h2 className="mt-1 text-lg font-black text-[#F4FFF8]">
-            Gastos por categoria
-          </h2>
-
-          <p className="mt-1 text-xs text-[#91A99C]">
-            Total analisado:{' '}
-            <span className="font-black text-[#3AF2A1]">
-              {formatarMoeda(total)}
-            </span>
-          </p>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2">
-          <button
-            onClick={() => setModo('grafico')}
-            className={`
-              relative flex min-h-[58px] min-w-[68px] flex-col items-center justify-center rounded-2xl border text-xs font-black transition active:scale-[0.98]
-              ${
-                modo === 'grafico'
-                  ? 'border-[#3AF2A1]/70 bg-[#3AF2A1]/10 text-[#3AF2A1] shadow-[0_0_20px_rgba(58,242,161,0.12)]'
-                  : 'border-[#1C2A24] bg-[#030504]/80 text-[#91A99C]'
-              }
-            `}
-          >
-            <BarChart3 size={22} />
-            <span className="mt-1">Gráfico</span>
-
-            {modo === 'grafico' && (
-              <span className="absolute -bottom-[1px] h-1 w-8 rounded-t-full bg-[#3AF2A1]" />
-            )}
-          </button>
-
-          <button
-            onClick={() => setModo('lista')}
-            className={`
-              relative flex min-h-[58px] min-w-[68px] flex-col items-center justify-center rounded-2xl border text-xs font-black transition active:scale-[0.98]
-              ${
-                modo === 'lista'
-                  ? 'border-[#3AF2A1]/70 bg-[#3AF2A1]/10 text-[#3AF2A1] shadow-[0_0_20px_rgba(58,242,161,0.12)]'
-                  : 'border-[#1C2A24] bg-[#030504]/80 text-[#91A99C]'
-              }
-            `}
-          >
-            <List size={22} />
-            <span className="mt-1">Lista</span>
-
-            {modo === 'lista' && (
-              <span className="absolute -bottom-[1px] h-1 w-8 rounded-t-full bg-[#3AF2A1]" />
-            )}
-          </button>
-        </div>
-      </div>
-
-      <div className="p-4">
-        {categorias.length === 0 ? (
-          <div className="rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-4">
-            <p className="text-sm font-semibold text-[#91A99C]">
-              Nenhuma despesa encontrada no período.
-            </p>
-          </div>
-        ) : modo === 'grafico' ? (
-          <GraficoBarrasCategorias
-            categorias={categorias}
-            onSelecionarCategoria={onSelecionarCategoria}
-          />
-        ) : (
-          <ListaCategoriasAtual
-            categorias={categorias}
-            onSelecionarCategoria={onSelecionarCategoria}
-          />
-        )}
-      </div>
-    </section>
-  )
-}
-
-function ListaCategoriasAtual({ categorias, onSelecionarCategoria }) {
-  return (
-    <div className="space-y-3">
-      {categorias.slice(0, 6).map((categoria) => (
-        <button
-          key={categoria.id}
-          onClick={() => onSelecionarCategoria(categoria)}
-          className="w-full rounded-3xl border border-[#1C2A24] bg-[#030504]/70 p-3 text-left transition active:scale-[0.99]"
-        >
-          <div className="mb-2 flex items-center justify-between gap-3">
-            <div className="flex min-w-0 items-center gap-2">
-              <IconeCategoria
-                icone={categoria.icone}
-                cor={categoria.cor}
-                tamanho="sm"
-                ativo
-              />
-
-              <p className="truncate text-sm font-black text-[#F4FFF8]">
-                {categoria.nome}
-              </p>
-            </div>
-
-            <p className="shrink-0 text-xs font-black text-red-300">
-              {formatarMoeda(categoria.total)}
-            </p>
-          </div>
-
-          <div className="h-2 overflow-hidden rounded-full bg-[#102018]">
-            <div
-              className="h-full rounded-full"
-              style={{
-                width: `${Math.max(categoria.largura || 0, 4)}%`,
-                backgroundColor: categoria.cor || '#3AF2A1',
-                boxShadow: `0 0 14px ${categoria.cor || '#3AF2A1'}55`
-              }}
-            />
-          </div>
-        </button>
-      ))}
-    </div>
-  )
-}
-
-function GraficoBarrasCategorias({ categorias, onSelecionarCategoria }) {
-  const maiorValor = categorias[0]?.total || 0
-  const meioValor = maiorValor / 2
-
-  return (
-    <div className="overflow-hidden rounded-[26px] border border-[#1C2A24] bg-[#151515] px-3 pb-3 pt-4">
-      <div className="relative">
-        <div className="pointer-events-none absolute bottom-0 left-[132px] top-0 w-px bg-[#8A8A8A]/55" />
-        <div className="pointer-events-none absolute bottom-0 left-[calc(132px+((100%-132px-42px)/2))] top-0 w-px bg-[#8A8A8A]/35" />
-        <div className="pointer-events-none absolute bottom-0 right-[42px] top-0 w-px bg-[#8A8A8A]/45" />
-
-        <div className="relative space-y-3.5">
-          {categorias.map((categoria) => (
-            <LinhaGraficoCategoria
-              key={categoria.id}
-              categoria={categoria}
-              onSelecionarCategoria={onSelecionarCategoria}
-            />
-          ))}
-        </div>
-      </div>
-
-      <div className="mt-3 grid grid-cols-[132px_minmax(0,1fr)_42px] text-[11px] font-semibold text-[#9CA3AF]">
-        <div />
-
-        <div className="grid grid-cols-3">
-          <p className="text-left">0</p>
-          <p className="text-center">{formatarNumeroCurto(meioValor)}</p>
-          <p className="text-right">{formatarNumeroCurto(maiorValor)}</p>
-        </div>
-
-        <div />
-      </div>
-    </div>
-  )
-}
-
-function LinhaGraficoCategoria({ categoria, onSelecionarCategoria }) {
-  const cor = categoria.cor || '#3AF2A1'
-
-  const percentualTexto = categoria.percentual.toLocaleString('pt-BR', {
-    maximumFractionDigits: 1
-  })
-
-  return (
-    <button
-      onClick={() => onSelecionarCategoria(categoria)}
-      className="grid w-full grid-cols-[42px_90px_minmax(0,1fr)_42px] items-center text-left active:scale-[0.995]"
-    >
-      <div className="flex justify-start">
-        <IconeCategoria
-          icone={categoria.icone}
-          cor={cor}
-          tamanho="sm"
-          ativo
-        />
-      </div>
-
-      <p className="truncate pr-3 text-left text-[12px] font-semibold text-[#D8E6DE]">
-        {categoria.nome}
-      </p>
-
-      <div className="relative h-7">
-        <div
-          className="flex h-7 items-center rounded-r-full transition-all duration-500"
-          style={{
-            width: `${Math.max(categoria.largura || 0, 6)}%`,
-            background: `linear-gradient(90deg, ${cor}, ${cor}dd, ${cor}aa)`,
-            boxShadow: `0 0 18px ${cor}35`
-          }}
-        />
-      </div>
-
-      <p className="pl-2 text-right text-[12px] font-black text-[#D8E6DE]">
-        {percentualTexto}%
-      </p>
-    </button>
   )
 }
 

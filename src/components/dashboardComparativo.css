@@ -1,0 +1,35 @@
+.dashboard-evolucao .home-resumo{min-width:0;border:1px solid #25362c;border-radius:17px;background:#101b15;padding:13px 9px;text-align:left}
+.dashboard-evolucao .home-resumo>span{font-size:11px;color:#9aafa1;display:block}
+.dashboard-evolucao .home-resumo strong{display:block;font-size:clamp(11px,3.4vw,15px);letter-spacing:-.4px;margin:6px 0;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.dashboard-evolucao .home-resumo small{font-size:11px;color:#9aafa1;display:block}
+.dashboard-evolucao .home-positivo{color:#3af2a1}.dashboard-evolucao .home-negativo{color:#f58b98}
+.dashboard-evolucao .home-painel{padding:18px 16px;border:1px solid #25362c;border-radius:23px;background:#101b15}
+.dashboard-evolucao .home-painel h2{font-size:17px;letter-spacing:-.3px;font-weight:700;color:#eefbf3}
+.dashboard-evolucao .home-sobretitulo{font-size:10px;letter-spacing:1.8px;text-transform:uppercase;color:#9aafa1;margin-bottom:5px}
+.dashboard-evolucao .home-abas{display:flex;background:#050b08;border-radius:10px;padding:4px;margin:16px 0}
+.dashboard-evolucao .home-abas button{flex:1;border-radius:7px;min-height:40px;font-size:12px;color:#9aafa1}
+.dashboard-evolucao .home-abas button[aria-pressed=true]{background:#1b2c22;color:#eefbf3}
+.dashboard-evolucao .home-destaque{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap;margin-bottom:18px}
+.dashboard-evolucao .home-destaque strong{font-size:27px;letter-spacing:-1px;overflow-wrap:anywhere}
+.dashboard-evolucao .home-destaque span{font-size:12px;color:#9aafa1}
+.dashboard-evolucao .home-comparacao-linha{display:grid;grid-template-columns:48px minmax(0,1fr) auto;gap:8px;align-items:center;margin:13px 0;font-size:11px}
+.dashboard-evolucao .home-comparacao-linha b{text-align:right;font-weight:550;font-variant-numeric:tabular-nums}
+.dashboard-evolucao .home-trilho{position:relative;height:20px;background:#050b08;border-radius:5px;overflow:hidden}
+.dashboard-evolucao .home-barra{height:100%;background:#3af2a1;border-radius:5px;transition:width .25s,left .25s}
+.dashboard-evolucao .home-anterior{background:#718998!important}
+.dashboard-evolucao .home-divergente:after{content:'';position:absolute;left:50%;height:100%;width:1px;background:#9aafa1}
+.dashboard-evolucao .home-nota{font-size:12px;color:#9aafa1;margin-top:12px}
+.dashboard-evolucao .home-cabecalho{display:flex;align-items:center;justify-content:space-between;gap:8px;flex-wrap:wrap}
+.dashboard-evolucao .home-modos{display:flex;gap:4px}.dashboard-evolucao .home-modos button{background:#050b08;padding:8px;border:1px solid #25362c;border-radius:8px;font-size:11px;min-height:40px}
+.dashboard-evolucao .home-modos button[aria-pressed=true]{color:#3af2a1;background:#142b20}
+.dashboard-evolucao .home-legenda{display:flex;flex-wrap:wrap;gap:15px;font-size:11px;color:#9aafa1;margin:14px 0}
+.dashboard-evolucao .home-legenda span{display:flex;align-items:center;gap:6px}.dashboard-evolucao .home-legenda i{display:inline-block;width:8px;height:8px;background:#3af2a1;border-radius:50%}
+.dashboard-evolucao .home-categoria{width:100%;text-align:left;padding:13px 0;border-bottom:1px solid #25362c}.dashboard-evolucao .home-categoria:last-child{border:0;padding-bottom:0}
+.dashboard-evolucao .home-categoria-topo{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px}
+.dashboard-evolucao .home-categoria-topo>span{text-align:right;flex-shrink:0}.dashboard-evolucao .home-categoria-topo small{display:block;font-size:11px;color:#9aafa1}
+.dashboard-evolucao .home-categoria-nome{display:flex;align-items:center;gap:8px;min-width:0;overflow-wrap:anywhere}
+.dashboard-evolucao .home-barras-categoria{display:grid;gap:5px;margin-top:9px}.dashboard-evolucao .home-barras-categoria .home-trilho{height:7px}
+.dashboard-evolucao .home-categoria-rodape{display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px;font-size:11px;color:#9aafa1;margin-top:7px}
+.dashboard-evolucao>.card-premium{background:#101b15;border:1px solid #25362c;box-shadow:none}
+.dashboard-evolucao button:focus-visible,.dashboard-evolucao select:focus-visible{outline:2px solid #3af2a1;outline-offset:3px}
+@media(prefers-reduced-motion:reduce){.dashboard-evolucao .home-barra{transition:none}}
