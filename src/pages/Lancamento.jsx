@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
 import { ArrowLeft, Save, Sparkles, Plus, Tags, Wallet, FileText } from 'lucide-react'
 
@@ -549,8 +549,27 @@ function CampoDescricaoComSugestoes({
   sugestoes,
   onSelecionarSugestao
 }) {
+  const campoRef = useRef(null)
+
+  useEffect(() => {
+    const fecharAoClicarFora = (event) => {
+      if (!campoRef.current?.contains(event.target)) setMostrarSugestoes(false)
+    }
+    document.addEventListener('pointerdown', fecharAoClicarFora, true)
+    return () => document.removeEventListener('pointerdown', fecharAoClicarFora, true)
+  }, [setMostrarSugestoes])
+
   return (
-    <div className="relative">
+    <div
+      ref={campoRef}
+      className="relative"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget)) setMostrarSugestoes(false)
+      }}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape') setMostrarSugestoes(false)
+      }}
+    >
       <label className="block">
         <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
           Descrição
