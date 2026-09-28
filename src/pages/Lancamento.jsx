@@ -1,12 +1,14 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useLiveQuery } from 'dexie-react-hooks'
-import { ArrowLeft, ChevronDown, Save, Sparkles } from 'lucide-react'
+import { ArrowLeft, Save, Sparkles, Plus, Tags, Wallet, FileText } from 'lucide-react'
 
 import { db, criarRegistroBase, agora, gerarUUID } from '../db/database'
-import { agendarSync, executarSync } from '../sync/syncManager'
+import { agendarSync } from '../sync/syncManager'
 import { Botao } from '../components/Botao'
 import { CampoTexto } from '../components/CampoTexto'
-import { CardPremium } from '../components/CardPremium'
+import './lancamento.css'
+import { CadastroRapido } from '../components/CadastroRapido'
+import { distribuirParcelas, somarMeses } from '../utils/parcelamento'
 import { FiltroSegmentado } from '../components/FiltroSegmentado'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
@@ -26,19 +28,11 @@ const moedaParaNumero = (valorFormatado) => {
   return Number(apenasNumeros) / 100
 }
 
-const adicionarMeses = (dataBase, quantidade) => {
-  const [ano, mes, dia] = dataBase.split('-').map(Number)
-  const data = new Date(ano, mes - 1 + quantidade, dia)
-  return data.toISOString().slice(0, 10)
-}
-
-const adicionarMesesFatura = (faturaRef, quantidade) => {
-  const [ano, mes] = faturaRef.split('-').map(Number)
-  const data = new Date(ano, mes - 1 + quantidade, 1)
-  return data.toISOString().slice(0, 7)
-}
+const adicionarMeses = somarMeses
+const adicionarMesesFatura = (mes, quantidade) => somarMeses(`${mes}-01`, quantidade).slice(0, 7)
 
 const calcularFaturaAtualCartao = (dataCompetencia, cartao) => {
+  if (!dataCompetencia) return ''
   if (!cartao) return dataCompetencia.slice(0, 7)
 
   const [ano, mes, dia] = dataCompetencia.split('-').map(Number)
@@ -109,8 +103,10 @@ export default function Lancamento({ onVoltar, configInicial }) {
   const [observacoes, setObservacoes] = useState('')
   const [mostrarSugestoes, setMostrarSugestoes] = useState(false)
 
-  const [modalTipoAberto, setModalTipoAberto] = useState(false)
-  const [modalParcelamentoAberto, setModalParcelamentoAberto] = useState(false)
+  const [cadastroAberto, setCadastroAberto] = useState(null)
+  const [salvando, setSalvando] = useState(false)
+  const [erroSalvar, setErroSalvar] = useState('')
+  const travaSalvar = useRef(false)
   const [modoValorParcelado, setModoValorParcelado] = useState('total')
 
   const usuarios = useLiveQuery(async () => {
@@ -190,39 +186,10 @@ export default function Lancamento({ onVoltar, configInicial }) {
 const valorNumerico = moedaParaNumero(valor)
 const totalParcelasNumero = Math.max(Number(totalParcelas || 0), 0)
 
-const valorParcelaPreview = useMemo(() => {
-  if (tipoLancamento !== 'parcelado') return 0
-  if (!valorNumerico || !totalParcelasNumero) return 0
-
-  if (modoValorParcelado === 'parcela') {
-    return valorNumerico
-  }
-
-  return Math.ceil((valorNumerico * 100) / totalParcelasNumero) / 100
-}, [tipoLancamento, valorNumerico, totalParcelasNumero, modoValorParcelado])
-
-const resumoTipoLancamento = useMemo(() => {
-  if (tipoLancamento === 'simples') {
-    return {
-      titulo: 'Não recorrente',
-      detalhe: ''
-    }
-  }
-
-  if (tipoLancamento === 'fixa_mensal') {
-    return {
-      titulo: 'Fixa mensal',
-      detalhe: 'Será repetido mensalmente por 12 meses'
-    }
-  }
-
-  return {
-    titulo: 'Parcelada',
-    detalhe: totalParcelasNumero > 0
-      ? `Em ${totalParcelasNumero}x de ${formatarCampoMoeda(String(Math.round(valorParcelaPreview * 100)))}`
-      : 'Configure a quantidade de parcelas'
-  }
-}, [tipoLancamento, totalParcelasNumero, valorParcelaPreview])
+const parcelasPreview = useMemo(() => distribuirParcelas(valorNumerico, totalParcelasNumero, modoValorParcelado), [valorNumerico, totalParcelasNumero, modoValorParcelado])
+const parcelaInicialNumero = Number(parcelaAtual)
+const parcelasValidas = parcelasPreview.length > 0 && Number.isInteger(parcelaInicialNumero) && parcelaInicialNumero >= 1 && parcelaInicialNumero <= totalParcelasNumero
+const moeda = (numero) => numero.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })
 
   const sugestoesBase = useMemo(() => {
     if (!lancamentos || !categorias || !subcategorias) return []
@@ -298,6 +265,7 @@ const cartao = cartoes?.find(
 
   const atualizarMetodo = (metodo) => {
     setMetodoPagamento(metodo)
+    if (metodo === 'cartao' && !dataCompetencia) setDataCompetencia(agora())
 
     if (metodo !== 'cartao') {
       setCartaoId('')
@@ -350,18 +318,19 @@ const cartao = cartoes?.find(
     if (!descricao.trim()) return 'Informe a descrição.'
     if (!moedaParaNumero(valor)) return 'Informe um valor válido.'
     if (!dataCompetencia) return 'Informe a data de competência.'
-    if (!categoriaId) return 'Selecione uma categoria.'
-    if (!subcategoriaId) return 'Selecione uma subcategoria.'
+    if (!categoriaSelecionada) return 'Selecione uma categoria.'
+    if (subcategoriaId && !subcategoriasFiltradas.some(item => item.id === Number(subcategoriaId))) return 'Selecione uma subcategoria desta categoria.'
 
     if (metodoPagamento === 'cartao') {
-      if (!cartaoId) return 'Selecione o cartão.'
+      if (!cartaoSelecionado) return 'Selecione o cartão.'
       if (!faturaSelecionada) return 'Selecione a fatura de referência.'
     }
 
     if (tipoLancamento === 'parcelado') {
-      if (!parcelaAtual || Number(parcelaAtual) < 1) return 'Informe a parcela atual.'
-      if (!totalParcelas || Number(totalParcelas) < 2) return 'Informe o total de parcelas.'
+      if (!Number.isInteger(Number(parcelaAtual)) || Number(parcelaAtual) < 1) return 'Informe a parcela atual.'
+      if (!Number.isInteger(Number(totalParcelas)) || Number(totalParcelas) < 2 || Number(totalParcelas) > 999) return 'Informe o total de parcelas.'
 
+      if (!parcelasPreview.length) return 'O valor deve permitir ao menos um centavo por parcela.'
       if (Number(parcelaAtual) > Number(totalParcelas)) {
         return 'A parcela atual não pode ser maior que o total.'
       }
@@ -405,7 +374,7 @@ const subcategoria = subcategorias?.find(
       faturaRef: metodoPagamento === 'cartao' ? faturaSelecionada : null,
       categoriaId: Number(categoriaId),
       categoriaUuid: categoria?.uuid || null,
-      subcategoriaId: Number(subcategoriaId),
+      subcategoriaId: subcategoriaId ? Number(subcategoriaId) : null,
       subcategoriaUuid: subcategoria?.uuid || null,
       status: statusFinal,
       recorrente: tipoLancamento === 'fixa_mensal',
@@ -430,24 +399,17 @@ const subcategoria = subcategorias?.find(
   const atual = Number(parcelaAtual)
   const total = Number(totalParcelas)
 
-  const valorInformado = moedaParaNumero(valor)
-  const valorTotalCentavos =
-    modoValorParcelado === 'parcela'
-      ? Math.round(valorInformado * 100) * total
-      : Math.round(valorInformado * 100)
-
-  const valorBaseCentavos = Math.floor(valorTotalCentavos / total)
-  const restoCentavos = valorTotalCentavos % total
+  const valoresParcelas = distribuirParcelas(moedaParaNumero(valor), total, modoValorParcelado)
 
   for (let parcela = 1; parcela <= total; parcela++) {
     const offset = parcela - atual
     const pagoRetroativo = parcela < atual
-    const valorParcelaCentavos = valorBaseCentavos + (parcela <= restoCentavos ? 1 : 0)
+    const valorParcela = valoresParcelas[parcela - 1]
 
     await db.lancamentos.add({
       ...criarRegistroBase(),
       ...base,
-      valor: valorParcelaCentavos / 100,
+      valor: valorParcela,
       status: pagoRetroativo ? 'pago' : 'pendente',
       dataPagamento: pagoRetroativo ? adicionarMeses(dataCompetencia, offset) : null,
       dataCompetencia: adicionarMeses(dataCompetencia, offset),
@@ -486,31 +448,30 @@ const subcategoria = subcategorias?.find(
       })
     }
 
-    executarSync()
+
   }
 
   const salvar = async () => {
+    if (travaSalvar.current) return
     const erro = validar()
-
-    if (erro) {
-      alert(erro)
-      return
+    setErroSalvar(erro || '')
+    if (erro) return
+    travaSalvar.current = true
+    setSalvando(true)
+    try {
+      await db.transaction('rw', db.lancamentos, async () => {
+        if (tipoLancamento === 'simples') await salvarSimples()
+        if (tipoLancamento === 'parcelado') await salvarParcelado()
+        if (tipoLancamento === 'fixa_mensal') await salvarFixaMensal()
+      })
+      agendarSync()
+      onVoltar()
+    } catch (erro) {
+      setErroSalvar('Não foi possível salvar. Seus dados continuam no formulário; tente novamente.')
+    } finally {
+      travaSalvar.current = false
+      setSalvando(false)
     }
-
-    if (tipoLancamento === 'simples') {
-      await salvarSimples()
-    }
-
-    if (tipoLancamento === 'parcelado') {
-      await salvarParcelado()
-    }
-
-    if (tipoLancamento === 'fixa_mensal') {
-      await salvarFixaMensal()
-    }
-
-    agendarSync()
-    onVoltar()
   }
 
   if (!usuarios || !categorias || !subcategorias || !cartoes || !lancamentos) {
@@ -522,212 +483,61 @@ const subcategoria = subcategorias?.find(
   }
 
   return (
-    <div className="space-y-4 pb-24">
-      <button
-        onClick={onVoltar}
-        className="flex items-center gap-2 text-sm font-black text-[#91A99C]"
-      >
-        <ArrowLeft size={18} />
-        Voltar
-      </button>
-
-      <TopoTela
-        titulo={tipo === 'receita' ? 'Nova receita' : metodoPagamento === 'cartao' ? 'Despesa no cartão' : 'Nova despesa'}
-        subtitulo="Registre movimentações, parcelas e recorrências."
-      />
-
-      <CardPremium className="space-y-4">
-        
-
-        <label className="block">
-          <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-            Usuário
-          </span>
-
-          <select
-            value={usuarioSelecionado}
-            onChange={(event) => setUsuarioId(event.target.value)}
-            className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-          >
-            {usuarios.map((usuario) => (
-              <option key={usuario.id} value={usuario.id}>
-                {usuario.nome}
-              </option>
-            ))}
-          </select>
+    <div className="lancamento-novo">
+      <button onClick={onVoltar} className="ln-voltar"><ArrowLeft size={17} />Voltar</button>
+      <TopoTela titulo={tipo === 'receita' ? 'Nova receita' : lancamentoCartao ? 'Despesa no cartão' : 'Nova despesa'} subtitulo="Cada detalhe no lugar. Sem complicar." />
+      <section className="ln-valor">
+        <label><span className="ln-label">{tipoLancamento === 'parcelado' && modoValorParcelado === 'parcela' ? 'Valor da parcela' : 'Valor total'}</span>
+          <input aria-label="Valor" inputMode="numeric" value={valor} placeholder="R$ 0,00" onChange={e => setValor(formatarCampoMoeda(e.target.value))} />
         </label>
-
-        <CampoDescricaoComSugestoes
-          descricao={descricao}
-          setDescricao={setDescricao}
-          setMostrarSugestoes={setMostrarSugestoes}
-          sugestoes={sugestoesFiltradas}
-          onSelecionarSugestao={selecionarSugestao}
-        />
-
-        <CampoTexto
-          label="Valor"
-          value={valor}
-          onChange={(novoValor) => setValor(formatarCampoMoeda(novoValor))}
-          placeholder="R$ 0,00"
-          type="text"
-          inputMode="numeric"
-        />
-
-         <SeletorTipoLancamento
-  resumo={resumoTipoLancamento}
-  onAbrir={() => setModalTipoAberto(true)}
-/>
-
-{tipoLancamento === 'parcelado' && (
-  <FiltroSegmentado
-    valor={modoValorParcelado}
-    onChange={setModoValorParcelado}
-    opcoes={[
-      { valor: 'total', label: 'Valor total' },
-      { valor: 'parcela', label: 'Valor parcela' }
-    ]}
-  />
-)}   
-
-        {lancamentoCartao && (
-          <>
-            <SeletorCartao
-              cartoes={cartoes}
-              cartaoSelecionado={cartaoSelecionado}
-              onSelecionar={atualizarCartao}
-            />
-
-            <label className="block">
-              <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-                Fatura
-              </span>
-
-              <select
-                value={faturaSelecionada}
-                onChange={(event) => setFaturaRef(event.target.value)}
-                className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none focus:border-[#3AF2A1]"
-              >
-                {opcoesFatura.map((item) => (
-                  <option key={item} value={item}>
-                    {formatarFatura(item)}
-                  </option>
-                ))}
-              </select>
-            </label>
-          </>
-        )}
-
-        {!lancamentoCartao && (
-          <>
-            <CampoTexto
-              label="Competência"
-              value={dataCompetencia}
-              onChange={atualizarDataCompetencia}
-              type="date"
-            />
-
-            <FiltroSegmentado
-              valor={metodoPagamento}
-              onChange={atualizarMetodo}
-              opcoes={[
-                { valor: 'pix', label: 'PIX' },
-                { valor: 'dinheiro', label: 'Dinheiro' }
-              ]}
-            />
-          </>
-        )}
-
-        <SeletorCategoria
-          categorias={categoriasFiltradas}
-          categoriaSelecionada={categoriaSelecionada}
-          onSelecionar={(id) => {
-            setCategoriaId(id)
-            setSubcategoriaId('')
-          }}
-        />
-
-        <label className="block">
-          <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-            Subcategoria
-          </span>
-
-          <select
-            value={subcategoriaId}
-            onChange={(event) => setSubcategoriaId(event.target.value)}
-            disabled={!categoriaId}
-            className="min-h-[48px] w-full rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none disabled:opacity-50 focus:border-[#3AF2A1]"
-          >
-            <option value="">
-              {categoriaId ? 'Selecione a subcategoria' : 'Escolha uma categoria primeiro'}
-            </option>
-
-            {subcategoriasFiltradas.map((subcategoria) => (
-              <option key={subcategoria.id} value={subcategoria.id}>
-                {subcategoria.nome}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        
-
-        {mostrarStatus && (
-          <FiltroSegmentado
-            valor={status}
-            onChange={setStatus}
-            opcoes={[
-              { valor: 'pendente', label: 'Pendente' },
-              { valor: 'pago', label: 'Pago' }
-            ]}
-          />
-        )}
-
-        <label className="block">
-          <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-            Observações
-          </span>
-
-          <textarea
-            value={observacoes}
-            onChange={(event) => setObservacoes(event.target.value)}
-            placeholder="Informações adicionais"
-            className="min-h-[86px] w-full resize-none rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-sm text-[#F4FFF8] outline-none placeholder:text-[#587367] focus:border-[#3AF2A1]"
-          />
-        </label>
-
-                <Botao onClick={salvar}>
-          <span className="inline-flex items-center justify-center gap-2">
-            <Save size={18} />
-            Salvar lançamento
-          </span>
-        </Botao>
-      </CardPremium>
-
-      {modalTipoAberto && (
-        <ModalTipoLancamento
-          tipoLancamento={tipoLancamento}
-          onSelecionar={(tipoSelecionado) => {
-            setTipoLancamento(tipoSelecionado)
-            setModalTipoAberto(false)
-
-            if (tipoSelecionado === 'parcelado') {
-              setModalParcelamentoAberto(true)
-            }
-          }}
-          onFechar={() => setModalTipoAberto(false)}
-        />
-      )}
-
-      {modalParcelamentoAberto && (
-        <ModalParcelamento
-          parcelaAtual={parcelaAtual}
-          totalParcelas={totalParcelas}
-          setParcelaAtual={setParcelaAtual}
-          setTotalParcelas={setTotalParcelas}
-          onFechar={() => setModalParcelamentoAberto(false)}
-        />
-      )}
+        <div className="ln-responsavel"><span>Responsável</span><div className="ln-opcoes">{usuarios.filter(u => !u.deletedAt).map(u => <button key={u.id} aria-pressed={Number(usuarioSelecionado) === u.id} onClick={() => setUsuarioId(String(u.id))}>{u.nome}</button>)}</div></div>
+      </section>
+      <section className="ln-secao"><h2><FileText size={18} />{tipo === 'receita' ? 'Sobre a receita' : 'Sobre a despesa'}</h2>
+        <CampoDescricaoComSugestoes descricao={descricao} setDescricao={setDescricao} setMostrarSugestoes={setMostrarSugestoes} sugestoes={sugestoesFiltradas} onSelecionarSugestao={selecionarSugestao} />
+      </section>
+      <section className="ln-secao"><h2><Tags size={18} />Classificação</h2>
+        <div className="ln-cabecampo"><label htmlFor="ln-categoria">Categoria</label><button aria-label="Cadastrar nova categoria" aria-expanded={cadastroAberto === 'categoria'} onClick={() => setCadastroAberto(cadastroAberto === 'categoria' ? null : 'categoria')}><Plus size={14} />Nova</button></div>
+        <select id="ln-categoria" value={categoriaId} onChange={e => {setCategoriaId(e.target.value); setSubcategoriaId(''); setCadastroAberto(null)}}>
+          <option value="">Selecione a categoria</option>{categoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+        {cadastroAberto === 'categoria' && <CadastroRapido tipo={tipo} onCancelar={() => setCadastroAberto(null)} onSalvo={id => {setCategoriaId(String(id)); setSubcategoriaId(''); setCadastroAberto(null)}} />}
+        <div className="ln-cabecampo ln-espaco"><label htmlFor="ln-subcategoria">Subcategoria · opcional</label><button disabled={!categoriaSelecionada} aria-label="Cadastrar nova subcategoria" aria-expanded={cadastroAberto === 'subcategoria'} onClick={() => setCadastroAberto(cadastroAberto === 'subcategoria' ? null : 'subcategoria')}><Plus size={14} />Nova</button></div>
+        <select id="ln-subcategoria" value={subcategoriaId} disabled={!categoriaId} onChange={e => setSubcategoriaId(e.target.value)}>
+          <option value="">{categoriaId ? 'Sem subcategoria' : 'Escolha uma categoria primeiro'}</option>{subcategoriasFiltradas.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
+        </select>
+        {cadastroAberto === 'subcategoria' && categoriaSelecionada && <CadastroRapido key={categoriaId} categoria={categoriaSelecionada} tipo={tipo} onCancelar={() => setCadastroAberto(null)} onSalvo={id => {setSubcategoriaId(String(id)); setCadastroAberto(null)}} />}
+      </section>
+      <section className="ln-secao"><h2><Wallet size={18} />{tipo === 'receita' ? 'Recebimento' : 'Pagamento'}</h2>
+        <div className="ln-opcoes" aria-label="Forma de pagamento">{[{id:'pix',nome:'PIX'}, {id:'dinheiro',nome:'Dinheiro'}, ...(tipo === 'despesa' ? [{id:'cartao',nome:'Cartão'}] : [])].map(m => <button key={m.id} aria-pressed={metodoPagamento === m.id} onClick={() => atualizarMetodo(m.id)}>{m.nome}</button>)}</div>
+        {lancamentoCartao ? <>
+          <div className="ln-grade ln-espaco">
+            <label><span className="ln-label">Cartão</span><select aria-label="Cartão" value={cartaoId} onChange={e => atualizarCartao(e.target.value)}><option value="">Selecione</option>{cartoes.map(c => <option key={c.id} value={c.id}>{c.nome}{c.bandeira ? ` · ${c.bandeira}` : ''}</option>)}</select></label>
+            <label><span className="ln-label">Fatura</span><select aria-label="Fatura" value={faturaSelecionada} onChange={e => setFaturaRef(e.target.value)}>{opcoesFatura.map(f => <option key={f} value={f}>{formatarFatura(f)}</option>)}</select></label>
+          </div>
+          <p className="ln-ajuda">{cartoes.length ? 'Pagamento acompanhado pela fatura do cartão.' : 'Nenhum cartão ativo. Cadastre um cartão na área Cartões para continuar.'}</p>
+        </> : <div className="ln-espaco"><CampoTexto label="Competência" value={dataCompetencia} onChange={atualizarDataCompetencia} type="date" /></div>}
+        {mostrarStatus && tipoLancamento !== 'parcelado' && <div className="ln-espaco"><span className="ln-label">Situação</span><FiltroSegmentado valor={status} onChange={setStatus} opcoes={[{valor:'pendente',label:'Pendente'},{valor:'pago',label:'Pago'}]} /></div>}
+        <label className="ln-espaco"><span className="ln-label">Tipo de lançamento</span><select aria-label="Tipo de lançamento" value={tipoLancamento} onChange={e => setTipoLancamento(e.target.value)}><option value="simples">Única vez</option><option value="parcelado">Parcelado</option><option value="fixa_mensal">Fixa mensal</option></select></label>
+        {tipoLancamento === 'fixa_mensal' && <p className="ln-ajuda">Será repetido mensalmente por 12 meses, a partir da referência escolhida.</p>}
+        {tipoLancamento === 'parcelado' && <div className="ln-parcelas">
+          <div className="ln-opcoes ln-espaco">{[{id:'total',nome:'Valor total'},{id:'parcela',nome:'Valor da parcela'}].map(m => <button key={m.id} aria-pressed={modoValorParcelado === m.id} onClick={() => setModoValorParcelado(m.id)}>{m.nome}</button>)}</div>
+          <div className="ln-grade ln-espaco">
+            <label><span className="ln-label">Parcela inicial</span><input type="number" min="1" max={totalParcelas || 999} value={parcelaAtual} onChange={e => setParcelaAtual(e.target.value)} /></label>
+            <label><span className="ln-label">Total de parcelas</span><input type="number" min="2" max="999" value={totalParcelas} onChange={e => setTotalParcelas(e.target.value)} /></label>
+          </div>
+          {parcelasValidas ? <>
+            <p className="ln-resumo" aria-live="polite">{totalParcelasNumero} parcelas · Total de {moeda(parcelasPreview.reduce((a,b) => a + b, 0))}</p>
+            <p className="ln-ajuda">{parcelaInicialNumero > 1 ? `As ${parcelaInicialNumero - 1} parcelas anteriores serão registradas como pagas. A referência escolhida corresponde à parcela ${parcelaInicialNumero}.` : 'As parcelas serão registradas como pendentes.'}</p>
+            <div className="ln-faturas"><h3>{lancamentoCartao ? 'Nas próximas faturas' : 'Próximas parcelas'}</h3>{parcelasPreview.slice(parcelaInicialNumero - 1, parcelaInicialNumero + 2).map((v, i) => <div key={i}><span>{formatarFatura(lancamentoCartao ? adicionarMesesFatura(faturaSelecionada, i) : adicionarMeses(dataCompetencia, i).slice(0,7))}<small>Parcela {parcelaInicialNumero + i}/{totalParcelasNumero}</small></span><strong>{moeda(v)}</strong></div>)}
+              {totalParcelasNumero - parcelaInicialNumero > 2 && <p className="ln-ajuda">+ {totalParcelasNumero - parcelaInicialNumero - 2} parcelas mensais</p>}
+              {parcelasPreview[0] !== parcelasPreview.at(-1) && <p className="ln-ajuda">Centavos distribuídos entre as parcelas para manter o total exato.</p>}
+            </div>
+          </> : <p className="ln-ajuda" role="status">Informe um valor e parcelas válidas para visualizar a distribuição.</p>}
+        </div>}
+      </section>
+      <details className="ln-secao"><summary>Observações <span>Opcional +</span></summary><textarea aria-label="Observações" value={observacoes} onChange={e => setObservacoes(e.target.value)} placeholder="Adicione um detalhe, se precisar." /></details>
+      {erroSalvar && <p className="ln-erro" role="alert">{erroSalvar}</p>}
+      <Botao disabled={salvando} onClick={salvar} className="ln-salvar"><span className="inline-flex items-center gap-2"><Save size={18} />{salvando ? 'Salvando…' : tipo === 'receita' ? 'Salvar receita' : 'Salvar despesa'}</span></Botao>
     </div>
   )
 }
@@ -809,314 +619,6 @@ function CampoDescricaoComSugestoes({
           ))}
         </div>
       )}
-    </div>
-  )
-}
-
-function SeletorCartao({ cartoes, cartaoSelecionado, onSelecionar }) {
-  const [aberto, setAberto] = useState(false)
-
-  return (
-    <div className="relative">
-      <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-        Cartão
-      </span>
-
-      <button
-        type="button"
-        onClick={() => setAberto((atual) => !atual)}
-        className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-left text-sm text-[#F4FFF8] outline-none"
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          <span
-            className="h-4 w-4 shrink-0 rounded-full shadow-[0_0_14px_currentColor]"
-            style={{
-              backgroundColor: cartaoSelecionado?.cor || '#1C2A24',
-              color: cartaoSelecionado?.cor || '#1C2A24'
-            }}
-          />
-
-          <span className="truncate">
-            {cartaoSelecionado
-              ? `${cartaoSelecionado.nome} · ${cartaoSelecionado.bandeira}`
-              : 'Selecione o cartão'}
-          </span>
-        </div>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-[#91A99C] transition ${aberto ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {aberto && (
-        <div className="absolute left-0 right-0 top-[76px] z-50 max-h-64 overflow-y-auto rounded-3xl border border-[#1C2A24] bg-[#07100B] p-2 shadow-2xl">
-          {cartoes.map((cartao) => (
-            <button
-              key={cartao.id}
-              type="button"
-              onClick={() => {
-                onSelecionar(String(cartao.id))
-                setAberto(false)
-              }}
-              className="flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:bg-[#3AF2A1]/5 active:scale-[0.99]"
-            >
-              <span
-                className="h-5 w-5 shrink-0 rounded-full shadow-[0_0_16px_currentColor]"
-                style={{
-                  backgroundColor: cartao.cor || '#0F9D58',
-                  color: cartao.cor || '#0F9D58'
-                }}
-              />
-
-              <div className="min-w-0">
-                <p className="truncate text-sm font-black text-[#F4FFF8]">
-                  {cartao.nome}
-                </p>
-                <p className="mt-0.5 text-xs text-[#91A99C]">
-                  {cartao.bandeira}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SeletorCategoria({ categorias, categoriaSelecionada, onSelecionar }) {
-  const [aberto, setAberto] = useState(false)
-
-  return (
-    <div className="relative">
-      <span className="mb-2 block text-xs font-semibold text-[#91A99C]">
-        Categoria
-      </span>
-
-      <button
-        type="button"
-        onClick={() => setAberto((atual) => !atual)}
-        className="flex min-h-[48px] w-full items-center justify-between gap-3 rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-left text-sm text-[#F4FFF8] outline-none"
-      >
-        <div className="flex min-w-0 items-center gap-3">
-          {categoriaSelecionada ? (
-            <IconeCategoria
-              icone={categoriaSelecionada.icone}
-              cor={categoriaSelecionada.cor}
-              tamanho="sm"
-              ativo
-            />
-          ) : (
-            <span className="h-10 w-10 shrink-0 rounded-2xl border border-[#1C2A24] bg-[#030504]" />
-          )}
-
-          <span className="truncate">
-            {categoriaSelecionada ? categoriaSelecionada.nome : 'Selecione a categoria'}
-          </span>
-        </div>
-
-        <ChevronDown
-          size={18}
-          className={`shrink-0 text-[#91A99C] transition ${aberto ? 'rotate-180' : ''}`}
-        />
-      </button>
-
-      {aberto && (
-        <div className="absolute left-0 right-0 top-[76px] z-50 max-h-72 overflow-y-auto rounded-3xl border border-[#1C2A24] bg-[#07100B] p-2 shadow-2xl">
-          {categorias.map((categoria) => (
-            <button
-              key={categoria.id}
-              type="button"
-              onClick={() => {
-                onSelecionar(String(categoria.id))
-                setAberto(false)
-              }}
-              className="flex w-full items-center gap-3 rounded-2xl p-3 text-left transition hover:bg-[#3AF2A1]/5 active:scale-[0.99]"
-            >
-              <IconeCategoria
-                icone={categoria.icone}
-                cor={categoria.cor}
-                tamanho="sm"
-                ativo={categoriaSelecionada?.id === categoria.id}
-              />
-
-              <span className="truncate text-sm font-black text-[#F4FFF8]">
-                {categoria.nome}
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function SeletorTipoLancamento({ resumo, onAbrir }) {
-  return (
-    <button
-      type="button"
-      onClick={onAbrir}
-      className="flex min-h-[58px] w-full items-center justify-between gap-3 rounded-2xl border border-[#1C2A24] bg-[#030504] px-4 py-3 text-left active:scale-[0.99]"
-    >
-      <div>
-        <p className="text-sm font-black text-[#F4FFF8]">
-          {resumo.titulo}
-        </p>
-
-        {resumo.detalhe && (
-          <p className="mt-1 text-xs font-semibold text-[#91A99C]">
-            {resumo.detalhe}
-          </p>
-        )}
-      </div>
-
-      <ChevronDown size={18} className="shrink-0 text-[#91A99C]" />
-    </button>
-  )
-}
-
-function ModalTipoLancamento({ tipoLancamento, onSelecionar, onFechar }) {
-  const opcoes = [
-    { valor: 'simples', label: 'Não recorrente' },
-    { valor: 'parcelado', label: 'Parcelada' },
-    { valor: 'fixa_mensal', label: 'Fixa mensal' }
-  ]
-
-  return (
-    <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C2A24] bg-[#111312] p-4 shadow-2xl">
-        <div className="mb-3 flex items-center justify-between">
-          <h2 className="text-xl font-black text-[#F4FFF8]">
-            Tipo de lançamento
-          </h2>
-
-          <button
-            onClick={onFechar}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl text-[#91A99C]"
-          >
-            ×
-          </button>
-        </div>
-
-        <div className="space-y-2">
-          {opcoes.map((opcao) => (
-            <button
-              key={opcao.valor}
-              type="button"
-              onClick={() => onSelecionar(opcao.valor)}
-              className="flex min-h-[58px] w-full items-center gap-4 rounded-2xl px-3 text-left active:scale-[0.99]"
-            >
-              <span
-                className={`h-7 w-7 rounded-full border-4 ${
-                  tipoLancamento === opcao.valor
-                    ? 'border-[#3AF2A1] bg-[#3AF2A1]/20'
-                    : 'border-[#D8E6DE]'
-                }`}
-              />
-
-              <span className="text-lg font-semibold text-[#F4FFF8]">
-                {opcao.label}
-              </span>
-            </button>
-          ))}
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ModalParcelamento({
-  parcelaAtual,
-  totalParcelas,
-  setParcelaAtual,
-  setTotalParcelas,
-  onFechar
-}) {
-  const alterarNumero = (valor, delta, minimo) => {
-    return String(Math.max(Number(valor || minimo) + delta, minimo)).slice(0, 3)
-  }
-
-  return (
-    <div className="fixed inset-0 z-[95] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm">
-      <div className="w-full max-w-[430px] rounded-[30px] border border-[#1C2A24] bg-[#111312] p-4 shadow-2xl">
-        <div className="mb-4 flex items-center justify-between">
-          <button
-            onClick={onFechar}
-            className="flex h-10 w-10 items-center justify-center rounded-2xl text-3xl text-[#D8E6DE]"
-          >
-            ×
-          </button>
-
-          <h2 className="text-xl font-black text-[#F4FFF8]">
-            Configurar Repetição
-          </h2>
-
-          <button
-            onClick={onFechar}
-            className="rounded-2xl bg-[#60A5FA] px-4 py-2 text-sm font-black text-[#111312]"
-          >
-            Concluir
-          </button>
-        </div>
-
-        <div className="divide-y divide-[#1C2A24]">
-          <ControleNumero
-            titulo="Parcela inicial"
-            valor={parcelaAtual}
-            onMenos={() => setParcelaAtual(alterarNumero(parcelaAtual, -1, 1))}
-            onMais={() => setParcelaAtual(alterarNumero(parcelaAtual, 1, 1))}
-            onChange={(novoValor) =>
-              setParcelaAtual(String(novoValor).replace(/\D/g, '').slice(0, 3))
-            }
-          />
-
-          <ControleNumero
-            titulo="Quantidade"
-            valor={totalParcelas}
-            onMenos={() => setTotalParcelas(alterarNumero(totalParcelas, -1, 2))}
-            onMais={() => setTotalParcelas(alterarNumero(totalParcelas, 1, 2))}
-            onChange={(novoValor) =>
-              setTotalParcelas(String(novoValor).replace(/\D/g, '').slice(0, 3))
-            }
-          />
-        </div>
-      </div>
-    </div>
-  )
-}
-
-function ControleNumero({ titulo, valor, onMenos, onMais, onChange }) {
-  return (
-    <div className="flex min-h-[78px] items-center justify-between gap-4 py-3">
-      <p className="text-lg font-semibold text-[#F4FFF8]">
-        {titulo}
-      </p>
-
-      <div className="flex items-center gap-4">
-        <button
-          type="button"
-          onClick={onMenos}
-          className="text-3xl font-black text-[#D8E6DE]"
-        >
-          ‹
-        </button>
-
-        <input
-          value={valor}
-          inputMode="numeric"
-          onChange={(event) => onChange(event.target.value)}
-          className="w-16 bg-transparent text-center text-2xl font-semibold text-[#F4FFF8] outline-none"
-        />
-
-        <button
-          type="button"
-          onClick={onMais}
-          className="text-3xl font-black text-[#D8E6DE]"
-        >
-          ›
-        </button>
-      </div>
     </div>
   )
 }

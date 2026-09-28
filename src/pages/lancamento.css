@@ -1,0 +1,42 @@
+.lancamento-novo{color:#f0faf4;padding-bottom:110px;display:grid;gap:16px;min-width:0}
+.lancamento-novo *{min-width:0}
+.lancamento-novo .ln-voltar{display:flex;align-items:center;gap:7px;color:#9db3a5;font-size:13px;width:fit-content;min-height:40px}
+.lancamento-novo header{margin-bottom:0}
+.lancamento-novo .ln-valor{padding:22px 18px;background:linear-gradient(150deg,#122d20,#08140e);border:1px solid #25372c;border-radius:24px}
+.lancamento-novo .ln-label{display:block;font-size:12px;color:#9db3a5;margin-bottom:8px}
+.lancamento-novo input,.lancamento-novo select,.lancamento-novo textarea{width:100%;min-height:48px;padding:12px;border:1px solid #25372c;border-radius:12px;background:#0a130e;color:#f0faf4;font-size:16px;outline:none}
+.lancamento-novo input:focus-visible,.lancamento-novo select:focus-visible,.lancamento-novo textarea:focus-visible,.lancamento-novo button:focus-visible,.lancamento-novo summary:focus-visible{outline:2px solid #3af2a1;outline-offset:3px}
+.lancamento-novo .ln-valor input{font-size:clamp(28px,9vw,42px);font-weight:650;letter-spacing:-1.5px;padding:0;background:transparent;border:0;font-variant-numeric:tabular-nums}
+.lancamento-novo .ln-responsavel{display:flex;align-items:center;gap:10px;margin-top:20px;font-size:12px;color:#9db3a5;flex-wrap:wrap}
+.lancamento-novo .ln-responsavel>.ln-opcoes{margin-left:auto}
+.lancamento-novo .ln-responsavel button{border-radius:22px;padding:8px 16px;min-height:40px}
+.lancamento-novo .ln-secao{padding:18px 16px;border:1px solid #25372c;border-radius:22px;background:#101b15}
+.lancamento-novo h2{display:flex;align-items:center;gap:8px;margin:0 0 17px;font-size:15px;font-weight:650}
+.lancamento-novo h2 svg{color:#9db3a5}
+.lancamento-novo .ln-cabecampo{display:flex;justify-content:space-between;align-items:center;gap:8px;margin-bottom:8px;font-size:12px;color:#9db3a5}
+.lancamento-novo .ln-cabecampo button{display:flex;align-items:center;gap:4px;min-height:36px;padding:6px 10px;border:1px solid #25372c;border-radius:9px;background:#122d20;color:#3af2a1}
+.lancamento-novo .ln-espaco{margin-top:18px}
+.lancamento-novo label.ln-espaco{display:block}
+.lancamento-novo .ln-opcoes{display:flex;gap:7px}
+.lancamento-novo .ln-opcoes button{flex:1;min-height:44px;padding:8px;border:1px solid #25372c;border-radius:11px;background:#0a130e;font-size:12px}
+.lancamento-novo .ln-opcoes button[aria-pressed=true]{color:#3af2a1;background:#122d20;border-color:#3af2a1}
+.lancamento-novo .ln-grade{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px}
+.lancamento-novo .ln-ajuda{color:#9db3a5;font-size:12px;line-height:1.5;margin-top:10px}
+.lancamento-novo .ln-resumo{background:#122d20;color:#3af2a1;border-radius:12px;padding:12px;font-size:13px;font-weight:600;margin-top:16px}
+.lancamento-novo .ln-faturas{margin-top:18px;border-top:1px solid #25372c;padding-top:16px}
+.lancamento-novo h3{font-size:13px;font-weight:650;margin:0 0 12px}
+.lancamento-novo .ln-faturas>div{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:12px 0;border-bottom:1px solid #25372c;font-size:13px}
+.lancamento-novo .ln-faturas small{display:block;font-size:11px;color:#9db3a5;margin-top:3px}
+.lancamento-novo .ln-faturas strong{white-space:nowrap;font-variant-numeric:tabular-nums}
+.lancamento-novo summary{display:flex;justify-content:space-between;cursor:pointer;font-size:13px;list-style:none}
+.lancamento-novo summary span{color:#9db3a5;font-size:11px}
+.lancamento-novo details textarea{margin-top:16px;min-height:86px;resize:vertical}
+.lancamento-novo .ln-salvar,.lancamento-novo .ln-opcoes .ln-criar{background:#3af2a1;color:#062216;font-weight:700;box-shadow:none}
+.lancamento-novo .ln-editor{padding:14px;background:#12241a;border:1px solid #376247;border-radius:15px;margin-top:14px}
+.lancamento-novo .ln-editor label{display:block;margin:12px 0}
+.lancamento-novo .ln-erro{color:#fda4af;font-size:13px;line-height:1.5;margin:12px 0}
+.lancamento-novo .ln-cores{display:flex;gap:10px;margin:14px 0}
+.lancamento-novo .ln-cores button{width:40px;height:40px;display:grid;place-items:center;border:1px solid transparent;border-radius:50%}
+.lancamento-novo .ln-cores button[aria-pressed=true]{border-color:var(--cor)}
+.lancamento-novo .ln-cores span{width:23px;height:23px;border-radius:50%;background:var(--cor)}
+.lancamento-novo button:disabled,.lancamento-novo select:disabled{opacity:.45;cursor:not-allowed}
