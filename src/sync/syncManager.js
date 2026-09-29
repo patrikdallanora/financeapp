@@ -1,3 +1,4 @@
+import { compararPagamentos } from './verificarPagamentos.js'
 import { confirmarRegistroEnviado } from './confirmarRegistroEnviado.js'
 import { db } from '../db/database'
 
@@ -239,6 +240,12 @@ const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
       continue
     }
 
+    // Preserve unresolved local edits without logging the same conflict every cycle.
+    if (local.syncStatus === 'conflict') {
+      infoTabela.conflitos++
+      continue
+    }
+
     const localTemAlteracao = local.syncStatus === 'pending'
 
     const remotoMaisNovo =
@@ -346,10 +353,16 @@ export const pushSync = async () => {
         throw new Error(dados.erro || `Erro HTTP ${resposta.status}`)
       }
 
+      if (dados.sucesso !== true) throw new Error('O servidor não confirmou o recebimento dos registros.')
+
       if (dados.sucesso) {
+        const divergencias = tabela === 'lancamentos'
+          ? compararPagamentos(pendentes, await buscarLancamentosParaConferencia()) : []
+        const naoConfirmados = new Set(divergencias.map(item => item.uuid))
         const agoraSync = new Date().toISOString()
 
         for (const item of pendentes) {
+          if (naoConfirmados.has(item.uuid)) continue
           await db[tabela]
             .where('uuid')
             .equals(item.uuid)
@@ -358,7 +371,8 @@ export const pushSync = async () => {
             })
         }
 
-        infoTabela.enviados = pendentes.length
+        infoTabela.enviados = pendentes.length - naoConfirmados.size
+        if (naoConfirmados.size) throw new Error(`${naoConfirmados.size} lançamento(s) enviados, mas não confirmados na base das notificações.`)
       }
     } catch (err) {
       infoTabela.erro = err.message
@@ -514,8 +528,7 @@ export const executarPullInicial = async () => {
   if (!navigator.onLine) {
     atualizarEstadoGlobalSync({
       online: false,
-      sincronizando: false,
-      ultimoErro: null
+      sincronizando: false
     })
 
     return {
@@ -553,8 +566,7 @@ export const executarPullInicial = async () => {
 
   atualizarEstadoGlobalSync({
     online: true,
-    sincronizando: true,
-    ultimoErro: null
+    sincronizando: true
   })
 
   try {
@@ -562,10 +574,8 @@ export const executarPullInicial = async () => {
 
   atualizarEstadoGlobalSync({
     sincronizando: false,
-    ultimaSincronizacao: pull.sucesso
-      ? new Date().toISOString()
-      : obterStatusSync().ultimaSincronizacao,
-    ultimoErro: pull.sucesso ? null : 'Falha ao atualizar dados na abertura.'
+    ultimaLeitura: pull.sucesso ? new Date().toISOString() : obterStatusSync().ultimaLeitura,
+    ultimoErro: pull.sucesso ? obterStatusSync().ultimoErro : 'Falha ao atualizar dados na abertura.'
   })
 
   if (pull.sucesso) {
@@ -613,8 +623,7 @@ export const executarSync = async () => {
   if (!navigator.onLine) {
     atualizarEstadoGlobalSync({
       online: false,
-      sincronizando: false,
-      ultimoErro: null
+      sincronizando: false
     })
 
     return {
@@ -636,8 +645,7 @@ export const executarSync = async () => {
   sincronizando = true
 
   atualizarEstadoGlobalSync({
-    sincronizando: true,
-    ultimoErro: null
+    sincronizando: true
   })
 
   try {
@@ -651,14 +659,17 @@ const pull = {
   depois: pullDepois
 }
 
-const sucesso = push.sucesso && pull.sucesso
+const pendencias = await contarPendenciasSync()
+const sucesso = push.sucesso && pull.sucesso && !pendencias.pendentes && !pendencias.conflitos
+const erroTabela = [...push.tabelas, ...pullAntes.tabelas, ...pullDepois.tabelas].find(item => item.erro)?.erro
 
     atualizarEstadoGlobalSync({
       sincronizando: false,
       ultimaSincronizacao: sucesso
         ? new Date().toISOString()
         : obterStatusSync().ultimaSincronizacao,
-      ultimoErro: sucesso ? null : 'Falha parcial na sincronização.'
+      ultimoErro: sucesso ? null : erroTabela || `${pendencias.pendentes} registro(s) aguardando envio e ${pendencias.conflitos} conflito(s).`,
+      ...pendencias
     })
 
     return {
@@ -702,8 +713,7 @@ export const restaurarBaseLocalDoSheets = async () => {
   }
 
   atualizarEstadoGlobalSync({
-    sincronizando: true,
-    ultimoErro: null
+    sincronizando: true
   })
 
   try {
@@ -803,8 +813,7 @@ export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
   window.addEventListener('online', () => {
     atualizarEstadoGlobalSync({
       online: true,
-      sincronizando: false,
-      ultimoErro: null
+      sincronizando: false
     })
 
     executarSync()
@@ -813,8 +822,7 @@ export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
   window.addEventListener('offline', () => {
     atualizarEstadoGlobalSync({
       online: false,
-      sincronizando: false,
-      ultimoErro: null
+      sincronizando: false
     })
   })
 
@@ -853,4 +861,48 @@ const prepararRegistroRestauracaoParaLocal = (registro) => {
     syncStatus: 'synced',
     lastSyncedAt: new Date().toISOString()
   }
+}
+export const contarPendenciasSync = async () => {
+  let pendentes = 0
+  let conflitos = 0
+  for (const tabela of TABELAS) {
+    pendentes += await db[tabela].where('syncStatus').equals('pending').count()
+    conflitos += await db[tabela].where('syncStatus').equals('conflict').count()
+  }
+  return { pendentes, conflitos }
+}
+
+const buscarLancamentosParaConferencia = async () => {
+  const config = verificarConfiguracaoSync()
+  if (!config.ok) throw new Error(config.erro)
+  if (!navigator.onLine) throw new Error('Conecte-se à internet para conferir os pagamentos.')
+  const url = new URL(API_URL)
+  url.searchParams.set('secret', API_SECRET || '')
+  url.searchParams.set('modo', 'pullBatch')
+  url.searchParams.set('tabelas', 'lancamentos')
+  url.searchParams.set('_conferencia', String(Date.now()))
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 30000)
+  try {
+    const resposta = await fetch(url.toString(), { cache: 'no-store', signal: controller.signal })
+    const dados = await lerRespostaJson(resposta)
+    if (!resposta.ok || dados.erro || !Array.isArray(dados.tabelas?.lancamentos)) {
+      throw new Error('Não foi possível confirmar os lançamentos na base das notificações.')
+    }
+    return dados.tabelas.lancamentos
+  } catch (erro) {
+    if (erro.name === 'AbortError') throw new Error('O servidor não respondeu à conferência em 30 segundos.')
+    throw erro
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// Read-only: never replace or erase the phone's payments during diagnosis.
+export const conferirPagamentosServidor = async () => {
+  const remotos = await buscarLancamentosParaConferencia()
+  const locais = (await db.lancamentos.toArray()).filter(item => !item.deletedAt)
+  const divergencias = compararPagamentos(locais, remotos)
+  const pendencias = await contarPendenciasSync()
+  return { divergencias, ...pendencias, conferidos: locais.length, verificadoEm: new Date().toISOString() }
 }

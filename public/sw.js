@@ -42,7 +42,8 @@ self.addEventListener('fetch', (event) => {
 
   const url = new URL(event.request.url)
 
-  if (url.pathname.startsWith('/api/')) return
+  // Never cache API responses, including the external Sheets sync API.
+  if (url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return
 
   if (event.request.mode === 'navigate') {
     event.respondWith(
