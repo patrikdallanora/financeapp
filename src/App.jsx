@@ -46,6 +46,8 @@ function App() {
       }
     }, 700)
 
+    iniciarAutoSync({ executarAoIniciar: false })
+
     const iniciar = async () => {
       await executarPullInicial()
 
@@ -54,9 +56,6 @@ function App() {
       clearTimeout(timerLoading)
       setMostrandoPullInicial(false)
 
-      iniciarAutoSync({
-        executarAoIniciar: false
-      })
     }
 
     iniciar()
@@ -183,7 +182,7 @@ function LoadingPullInicial() {
             Atualizando dados
           </p>
           <p className="text-[11px] text-[#91A99C]">
-            Buscando alterações recentes...
+            Enviando baixas e confirmando no servidor...
           </p>
         </div>
       </div>

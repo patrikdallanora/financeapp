@@ -1,3 +1,4 @@
+import { recuperarPagamentoLocal } from './recuperarPagamentoLocal.js'
 import { compararPagamentos, podeReenviarPagamento, mesmoPagamento } from './verificarPagamentos.js'
 import { confirmarRegistroEnviado } from './confirmarRegistroEnviado.js'
 import { db } from '../db/database'
@@ -25,6 +26,7 @@ let intervaloAtivo = null
 let debounceTimer = null
 let autoSyncIniciado = false
 let conferenciaEmAndamento = false
+let syncSolicitada = false
 
 const requisitarApi = async (url, opcoes = {}) => {
   const controller = new AbortController()
@@ -33,14 +35,16 @@ const requisitarApi = async (url, opcoes = {}) => {
   if (opcoes.signal?.aborted) abortar()
   opcoes.signal?.addEventListener('abort', abortar, { once: true })
   try {
-    const resposta = await fetch(url, { ...opcoes, cache: 'no-store', signal: controller.signal })
+    const destino = new URL('/api/sync', window.location.origin)
+    destino.search = new URL(url).search
+    const resposta = await fetch(import.meta.env.PROD ? destino.toString() : url, { ...opcoes, cache: 'no-store', signal: controller.signal })
     const texto = await resposta.text()
     return { ok: resposta.ok, status: resposta.status, text: async () => texto }
   } catch (erro) {
     if (erro.name === 'AbortError') {
       throw new Error(opcoes.method === 'POST'
-        ? 'O envio demorou além do limite. Ele pode ter sido recebido; confira o servidor antes de repetir.'
-        : 'A consulta não terminou em 60 segundos. Seus dados locais foram preservados; tente novamente mais tarde.')
+        ? 'O envio ainda não foi confirmado. A sincronização tentará novamente automaticamente.'
+        : 'O servidor demorou para responder. Seus dados estão salvos no aparelho; tentaremos novamente automaticamente.')
     }
     throw erro
   } finally {
@@ -154,7 +158,7 @@ const lerRespostaJson = async (resposta) => {
   try {
     return JSON.parse(texto)
   } catch {
-    throw new Error(`Resposta inválida da API: ${texto.slice(0, 300)}`)
+    throw new Error('O serviço do Google retornou uma resposta inválida. Seus dados estão salvos; a sincronização tentará novamente automaticamente.')
   }
 }
 
@@ -218,8 +222,9 @@ const removerIdLocal = (registro) => {
 }
 
 const prepararRegistroParaRemote = (registro) => {
+  const { envioIncerto, ...dados } = registro
   return {
-    ...registro,
+    ...dados,
     syncStatus: 'synced',
     lastSyncedAt: new Date().toISOString()
   }
@@ -270,7 +275,7 @@ const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
       maiorUpdatedAt = remoto.updatedAt
     }
 
-    const local = mapaLocaisPorUuid.get(remoto.uuid)
+    const local = await db[tabela].where('uuid').equals(remoto.uuid).first()
     const remotoNormalizado = prepararRegistroParaLocal(remoto)
 
     if (!local) {
@@ -292,6 +297,8 @@ const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
       local.updatedAt &&
       new Date(remoto.updatedAt).getTime() > new Date(local.updatedAt).getTime()
 
+    if (localTemAlteracao && tabela === 'lancamentos') continue
+
     if (localTemAlteracao && remotoMaisNovo) {
       await db[tabela]
         .where('uuid')
@@ -309,7 +316,9 @@ const aplicarRegistrosRemotosNaTabela = async (tabela, remotos) => {
       await db[tabela]
         .where('uuid')
         .equals(remoto.uuid)
-        .modify(remotoNormalizado)
+        .modify(atual => {
+          if (JSON.stringify(atual) === JSON.stringify(local)) Object.assign(atual, remotoNormalizado)
+        })
 
       infoTabela.atualizados++
     }
@@ -371,8 +380,19 @@ export const pushSync = async () => {
     }
 
     try {
-      const registrosParaRemote = pendentes.map(prepararRegistroParaRemote)
+      let paraEnviar = pendentes
+      if (tabela === 'lancamentos' && pendentes.some(item => item.envioIncerto)) {
+        const remotos = await buscarLancamentosParaConferencia()
+        const divergentes = new Set(compararPagamentos(pendentes, remotos).map(item => item.uuid))
+        paraEnviar = pendentes.filter(item => {
+          const remoto = remotos.find(r => r.uuid === item.uuid)
+          const mesmosDados = remoto && ['descricao', 'observacoes', 'tipo', 'categoriaUuid', 'subcategoriaUuid', 'usuarioUuid', 'beneficiario'].every(k => String(item[k] ?? '') === String(remoto[k] ?? ''))
+          return divergentes.has(item.uuid) || !mesmosDados || new Date(remoto.updatedAt).getTime() < new Date(item.updatedAt).getTime()
+        })
+      }
+      const registrosParaRemote = paraEnviar.map(prepararRegistroParaRemote)
 
+      if (paraEnviar.length) {
       const resposta = await requisitarApi(API_URL, {
         method: 'POST',
         headers: {
@@ -394,7 +414,8 @@ export const pushSync = async () => {
 
       if (dados.sucesso !== true) throw new Error('O servidor não confirmou o recebimento dos registros.')
 
-      if (dados.sucesso) {
+      }
+      {
         const divergencias = tabela === 'lancamentos'
           ? compararPagamentos(pendentes, await buscarLancamentosParaConferencia()) : []
         const naoConfirmados = new Set(divergencias.map(item => item.uuid))
@@ -414,6 +435,11 @@ export const pushSync = async () => {
         if (naoConfirmados.size) throw new Error(`${naoConfirmados.size} lançamento(s) enviados, mas não confirmados na base das notificações.`)
       }
     } catch (err) {
+      if (tabela === 'lancamentos') {
+        for (const enviado of pendentes) await db.lancamentos.where('uuid').equals(enviado.uuid).modify(atual => {
+          if (atual.syncStatus === 'pending') atual.envioIncerto = true
+        })
+      }
       infoTabela.erro = err.message
       resultado.sucesso = false
       console.error(`Erro no push da tabela ${tabela}:`, err)
@@ -548,98 +574,29 @@ export const pullBatchSync = async (tabelasSolicitadas = TABELAS) => {
   return resultado
 }
 
-export const executarPullInicial = async () => {
-  const config = verificarConfiguracaoSync()
+// Opening and returning to the app must send changes as well as receive them.
+export const executarPullInicial = () => executarSync()
 
-  if (!config.ok) {
-    atualizarEstadoGlobalSync({
-      sincronizando: false,
-      ultimoErro: config.erro
-    })
-
-    return {
-      sucesso: false,
-      erro: config.erro,
-      etapa: 'pull-inicial'
-    }
+const recuperarBaixasAntigas = async () => {
+  const chave = 'financeapp_recuperacao_pagamentos_v1'
+  if (localStorage.getItem(chave)) return
+  const remotos = await buscarLancamentosParaConferencia()
+  const porUuid = new Map()
+  for (const remoto of remotos) {
+    const lista = porUuid.get(remoto.uuid) || []
+    lista.push(remoto)
+    porUuid.set(remoto.uuid, lista)
   }
-
-  if (!navigator.onLine) {
-    atualizarEstadoGlobalSync({
-      online: false,
-      sincronizando: false
-    })
-
-    return {
-      sucesso: false,
-      erro: 'offline',
-      etapa: 'pull-inicial'
+  // Queue recovery durably before any pull can replace a legacy paid record.
+  await db.transaction('rw', db.lancamentos, async () => {
+    for (const local of await db.lancamentos.toArray()) {
+      if (local.syncStatus === 'pending') continue
+      const candidatos = porUuid.get(local.uuid) || []
+      const recuperado = recuperarPagamentoLocal(local, candidatos, new Date().toISOString())
+      if (recuperado) await db.lancamentos.put(recuperado)
     }
-  }
-
-  if (pullInicialExecutando || sincronizando || conferenciaEmAndamento) {
-    return {
-      sucesso: true,
-      ignorado: true,
-      motivo: 'Pull inicial já em andamento.',
-      etapa: 'pull-inicial'
-    }
-  }
-
-  const ultimoPullInicial = obterUltimoPullInicial()
-
-  if (ultimoPullInicial) {
-    const tempoDesdeUltimoPull = Date.now() - new Date(ultimoPullInicial).getTime()
-
-    if (tempoDesdeUltimoPull < INTERVALO_MINIMO_PULL_INICIAL) {
-      return {
-        sucesso: true,
-        ignorado: true,
-        motivo: 'Pull inicial executado recentemente.',
-        etapa: 'pull-inicial'
-      }
-    }
-  }
-
-  pullInicialExecutando = true
-
-  atualizarEstadoGlobalSync({
-    online: true,
-    sincronizando: true
   })
-
-  try {
-  const pull = await pullBatchSync(TABELAS)
-
-  atualizarEstadoGlobalSync({
-    sincronizando: false,
-    ultimaLeitura: pull.sucesso ? new Date().toISOString() : obterStatusSync().ultimaLeitura,
-    ultimoErro: pull.sucesso ? obterStatusSync().ultimoErro : 'Falha ao atualizar dados na abertura.'
-  })
-
-  if (pull.sucesso) {
-    salvarUltimoPullInicial()
-  }
-
-  return {
-    sucesso: pull.sucesso,
-    etapa: 'pull-inicial',
-    pull
-  }
-} catch (err) {
-  atualizarEstadoGlobalSync({
-    sincronizando: false,
-    ultimoErro: err.message
-  })
-
-  return {
-    sucesso: false,
-    erro: err.message,
-    etapa: 'pull-inicial'
-  }
-} finally {
-    pullInicialExecutando = false
-  }
+  localStorage.setItem(chave, new Date().toISOString())
 }
 
 export const executarSync = async () => {
@@ -674,6 +631,7 @@ export const executarSync = async () => {
   }
 
   if (sincronizando || pullInicialExecutando || conferenciaEmAndamento) {
+    syncSolicitada = true
     return {
       sucesso: true,
       ignorado: true,
@@ -682,27 +640,23 @@ export const executarSync = async () => {
   }
 
   sincronizando = true
+  syncSolicitada = false
 
   atualizarEstadoGlobalSync({
     sincronizando: true
   })
 
   try {
-    const pullAntes = await pullBatchSync(TABELAS)
-const push = await pushSync()
-const pullDepois = push.tabelas.some(item => item.enviados > 0)
-  ? await pullBatchSync(TABELAS)
-  : { sucesso: true, tabelas: [] }
-
-const pull = {
-  sucesso: pullAntes.sucesso && pullDepois.sucesso,
-  antes: pullAntes,
-  depois: pullDepois
-}
-
-const pendencias = await contarPendenciasSync()
-const sucesso = push.sucesso && pull.sucesso && !pendencias.pendentes && !pendencias.conflitos
-const erroTabela = [...push.tabelas, ...pullAntes.tabelas, ...pullDepois.tabelas].find(item => item.erro)?.erro
+    // Send new edits first: a read failure must not prevent a payment upload.
+    const primeiroPush = await pushSync()
+    await recuperarBaixasAntigas()
+    const recuperacaoPush = await pushSync()
+    const push = { sucesso: primeiroPush.sucesso && recuperacaoPush.sucesso,
+      tabelas: [...primeiroPush.tabelas, ...recuperacaoPush.tabelas] }
+    const pull = await pullBatchSync(TABELAS)
+    const pendencias = await contarPendenciasSync()
+    const sucesso = recuperacaoPush.sucesso && pull.sucesso && !pendencias.pendentes && !pendencias.conflitos
+    const erroTabela = [...recuperacaoPush.tabelas, ...pull.tabelas].find(item => item.erro)?.erro
 
     atualizarEstadoGlobalSync({
       sincronizando: false,
@@ -732,10 +686,12 @@ const erroTabela = [...push.tabelas, ...pullAntes.tabelas, ...pullDepois.tabelas
     }
   } finally {
     sincronizando = false
+    if (syncSolicitada) agendarSync()
   }
 }
 
 export const agendarSync = () => {
+  syncSolicitada = true
   if (!navigator.onLine) return
 
   clearTimeout(debounceTimer)
@@ -941,6 +897,7 @@ export const conferirPagamentosServidor = async () => {
     return { divergencias, ...pendencias, conferidos: locais.length, verificadoEm: new Date().toISOString() }
   } finally {
     conferenciaEmAndamento = false
+    if (syncSolicitada) agendarSync()
   }
 }
 
@@ -981,5 +938,6 @@ export const reenviarPagamentoConferido = async (divergencia) => {
     sincronizando = false
     conferenciaEmAndamento = false
     atualizarEstadoGlobalSync({ sincronizando: false })
+    if (syncSolicitada) agendarSync()
   }
 }

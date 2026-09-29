@@ -160,7 +160,7 @@ const testarNotificacao = async () => {
             </p>
 
             <p className="mt-1 text-sm leading-5 text-[#91A99C]">
-              O app salva tudo offline e sincroniza automaticamente quando houver conexão.
+              As baixas são enviadas automaticamente ao abrir o app, ao voltar para ele e após cada alteração. Sem conexão, ficam salvas até o envio ser confirmado.
             </p>
           </div>
         </div>
@@ -202,7 +202,7 @@ const testarNotificacao = async () => {
 
       <CardPremium className="space-y-3">
         <p className="font-black text-[#F4FFF8]">Conferência dos pagamentos</p>
-        <p className="text-sm text-[#91A99C]">Compara este aparelho com a base usada nas notificações, sem alterar seus dados.</p>
+        <p className="text-sm text-[#91A99C]">Consulta opcional para diagnóstico. A sincronização dos pagamentos funciona automaticamente, sem precisar conferir.</p>
         <button disabled={conferindo || Boolean(reenviando)} onClick={conferir} className="w-full rounded-2xl border border-[#3AF2A1]/40 px-4 py-3 text-sm font-bold text-[#3AF2A1] disabled:opacity-50">{conferindo ? 'Aguardando e conferindo…' : 'Conferir pagamentos no servidor'}</button>
         {(conferindo || reenviando) && <p role="status" className="text-xs text-[#91A99C]">Aguardando a sincronização atual, se houver. Cada consulta pode levar até 60 segundos. Mantenha o app aberto.</p>}
         {resultadoReenvio && <p role="status" className="text-sm text-[#3AF2A1]">{resultadoReenvio}</p>}
@@ -351,7 +351,7 @@ function LinhaStatus({ icone: Icone, titulo, valor, destaque }) {
         <p className="text-xs font-semibold text-[#91A99C]">{titulo}</p>
       </div>
 
-      <p className={`text-right text-xs font-black ${cores[destaque] || cores.neutro}`}>
+      <p className={`min-w-0 max-w-[65%] break-words text-right text-xs font-black ${cores[destaque] || cores.neutro}`}>
         {valor}
       </p>
     </div>

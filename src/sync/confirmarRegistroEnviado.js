@@ -5,6 +5,7 @@ export const confirmarRegistroEnviado = (local, enviado, agora) => {
   campos.delete('syncStatus')
   campos.delete('lastSyncedAt')
   if ([...campos].some((campo) => JSON.stringify(local[campo]) !== JSON.stringify(enviado[campo]))) return
+  delete local.envioIncerto
   local.syncStatus = 'synced'
   local.lastSyncedAt = agora
 }

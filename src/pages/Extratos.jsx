@@ -712,11 +712,11 @@ cartao: lancamento.cartao,
     .filter((item) => {
       if (item.deletedAt) return false
 
-      const mesmoCartao =
-        item.cartaoUuid === modalPagamento.cartaoUuid ||
-        Number(item.cartaoId) === Number(modalPagamento.cartaoId)
+      const mesmoCartao = item.cartaoUuid && modalPagamento.cartaoUuid
+        ? item.cartaoUuid === modalPagamento.cartaoUuid
+        : Boolean(item.cartaoId && modalPagamento.cartaoId) && Number(item.cartaoId) === Number(modalPagamento.cartaoId)
 
-      return mesmoCartao && item.faturaRef === modalPagamento.faturaRef
+      return item.metodoPagamento === 'cartao' && mesmoCartao && String(item.faturaRef).slice(0, 7) === String(modalPagamento.faturaRef).slice(0, 7)
     })
     .toArray()
 
@@ -746,7 +746,7 @@ cartao: lancamento.cartao,
   const agora = agoraISO()
   const dataPagamento = new Date().toISOString().slice(0, 10)
 
-  await Promise.all(
+  await db.transaction('rw', db.lancamentos, () => Promise.all(
     itensDaFatura.map((item) =>
       db.lancamentos.update(item.id, {
         faturaValorPago: novoValorPago,
@@ -757,7 +757,7 @@ cartao: lancamento.cartao,
         syncStatus: 'pending'
       })
     )
-  )
+  ))
 
   agendarSync()
   await executarSync()
