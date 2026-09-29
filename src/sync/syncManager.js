@@ -1,4 +1,4 @@
-import { compararPagamentos } from './verificarPagamentos.js'
+import { compararPagamentos, podeReenviarPagamento, mesmoPagamento } from './verificarPagamentos.js'
 import { confirmarRegistroEnviado } from './confirmarRegistroEnviado.js'
 import { db } from '../db/database'
 
@@ -905,4 +905,45 @@ export const conferirPagamentosServidor = async () => {
   const divergencias = compararPagamentos(locais, remotos)
   const pendencias = await contarPendenciasSync()
   return { divergencias, ...pendencias, conferidos: locais.length, verificadoEm: new Date().toISOString() }
+}
+
+export const reenviarPagamentoConferido = async (divergencia) => {
+  if (sincronizando || pullInicialExecutando) throw new Error('Aguarde a sincronização em andamento e tente novamente.')
+  sincronizando = true
+  atualizarEstadoGlobalSync({ sincronizando: true })
+  try {
+    const remotos = await buscarLancamentosParaConferencia()
+    const candidatos = remotos.filter(item => item.uuid === divergencia.uuid)
+    const locais = await db.lancamentos.where('uuid').equals(divergencia.uuid).toArray()
+    const local = locais[0], remoto = candidatos[0]
+    if (locais.length !== 1 || candidatos.length !== 1 || !podeReenviarPagamento(local, remoto) ||
+        local.updatedAt !== divergencia.local.atualizado || remoto.updatedAt !== divergencia.remoto?.atualizado) {
+      throw new Error('O registro mudou desde a conferência. Confira novamente antes de reenviar.')
+    }
+    // Preserve all server fields; only apply the confirmed payment from this device.
+    const enviado = { ...remoto, status: local.status, dataPagamento: local.dataPagamento,
+      updatedAt: new Date().toISOString(), syncStatus: 'synced' }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 30000)
+    try {
+      const resposta = await fetch(API_URL, { method: 'POST', signal: controller.signal,
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify({secret:API_SECRET, tabela:'lancamentos', registros:[enviado], deviceId:obterDeviceId()}) })
+      const dados = await lerRespostaJson(resposta)
+      if (!resposta.ok || dados.erro || dados.sucesso !== true) throw new Error('O servidor não confirmou o recebimento do pagamento.')
+    } finally { clearTimeout(timer) }
+    const confirmados = (await buscarLancamentosParaConferencia()).filter(item => item.uuid === enviado.uuid)
+    if (confirmados.length !== 1 || !mesmoPagamento(enviado, confirmados[0])) {
+      throw new Error('O servidor recebeu o pedido, mas o pagamento ainda não foi confirmado na leitura. Seus dados locais foram preservados.')
+    }
+    await db.lancamentos.where('uuid').equals(local.uuid).modify(atual => {
+      if (JSON.stringify(atual) !== JSON.stringify(local)) return
+      atual.updatedAt = enviado.updatedAt
+      atual.lastSyncedAt = new Date().toISOString()
+    })
+    return {sucesso:true}
+  } finally {
+    sincronizando = false
+    atualizarEstadoGlobalSync({ sincronizando: false })
+  }
 }
