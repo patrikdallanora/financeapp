@@ -15,7 +15,7 @@ const TABELAS = [
   'metas'
 ]
 
-const INTERVALO_SYNC = 1000 * 15
+const INTERVALO_SYNC = 1000 * 60
 const DEBOUNCE_SYNC = 800
 const INTERVALO_MINIMO_PULL_INICIAL = 1000 * 20
 
@@ -24,6 +24,45 @@ let pullInicialExecutando = false
 let intervaloAtivo = null
 let debounceTimer = null
 let autoSyncIniciado = false
+let conferenciaEmAndamento = false
+
+const requisitarApi = async (url, opcoes = {}) => {
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 60000)
+  const abortar = () => controller.abort()
+  if (opcoes.signal?.aborted) abortar()
+  opcoes.signal?.addEventListener('abort', abortar, { once: true })
+  try {
+    const resposta = await fetch(url, { ...opcoes, cache: 'no-store', signal: controller.signal })
+    const texto = await resposta.text()
+    return { ok: resposta.ok, status: resposta.status, text: async () => texto }
+  } catch (erro) {
+    if (erro.name === 'AbortError') {
+      throw new Error(opcoes.method === 'POST'
+        ? 'O envio demorou além do limite. Ele pode ter sido recebido; confira o servidor antes de repetir.'
+        : 'A consulta não terminou em 60 segundos. Seus dados locais foram preservados; tente novamente mais tarde.')
+    }
+    throw erro
+  } finally {
+    clearTimeout(timeout)
+    opcoes.signal?.removeEventListener('abort', abortar)
+  }
+}
+
+const reservarConferencia = async () => {
+  if (conferenciaEmAndamento) throw new Error('Já existe uma conferência em andamento.')
+  conferenciaEmAndamento = true
+  const limite = Date.now() + 120000
+  try {
+    while (sincronizando || pullInicialExecutando) {
+      if (Date.now() > limite) throw new Error('A sincronização anterior ainda não terminou. Aguarde e tente novamente.')
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+  } catch (erro) {
+    conferenciaEmAndamento = false
+    throw erro
+  }
+}
 
 const obterDeviceId = () => {
   let deviceId = localStorage.getItem('financeapp_device_id')
@@ -289,7 +328,7 @@ const checkChangesSync = async () => {
   url.searchParams.set('secret', API_SECRET || '')
   url.searchParams.set('meta', JSON.stringify(obterMetaLocal()))
 
-  const resposta = await fetch(url.toString(), {
+  const resposta = await requisitarApi(url.toString(), {
     method: 'GET'
   })
 
@@ -334,7 +373,7 @@ export const pushSync = async () => {
     try {
       const registrosParaRemote = pendentes.map(prepararRegistroParaRemote)
 
-      const resposta = await fetch(API_URL, {
+      const resposta = await requisitarApi(API_URL, {
         method: 'POST',
         headers: {
           'Content-Type': 'text/plain;charset=utf-8'
@@ -405,7 +444,7 @@ export const pullSync = async () => {
         url.searchParams.set('updatedAfter', updatedAfter)
       }
 
-      const resposta = await fetch(url.toString(), {
+      const resposta = await requisitarApi(url.toString(), {
         method: 'GET'
       })
 
@@ -462,7 +501,7 @@ export const pullBatchSync = async (tabelasSolicitadas = TABELAS) => {
   )
   url.searchParams.set('tabelas', tabelasSolicitadas.join(','))
 
-  const resposta = await fetch(url.toString(), {
+  const resposta = await requisitarApi(url.toString(), {
     method: 'GET'
   })
 
@@ -538,7 +577,7 @@ export const executarPullInicial = async () => {
     }
   }
 
-  if (pullInicialExecutando) {
+  if (pullInicialExecutando || sincronizando || conferenciaEmAndamento) {
     return {
       sucesso: true,
       ignorado: true,
@@ -634,7 +673,7 @@ export const executarSync = async () => {
     }
   }
 
-  if (sincronizando) {
+  if (sincronizando || pullInicialExecutando || conferenciaEmAndamento) {
     return {
       sucesso: true,
       ignorado: true,
@@ -649,9 +688,11 @@ export const executarSync = async () => {
   })
 
   try {
-    const pullAntes = await pullSync()
+    const pullAntes = await pullBatchSync(TABELAS)
 const push = await pushSync()
-const pullDepois = await pullSync()
+const pullDepois = push.tabelas.some(item => item.enviados > 0)
+  ? await pullBatchSync(TABELAS)
+  : { sucesso: true, tabelas: [] }
 
 const pull = {
   sucesso: pullAntes.sucesso && pullDepois.sucesso,
@@ -739,7 +780,7 @@ export const restaurarBaseLocalDoSheets = async () => {
     url.searchParams.set('secret', API_SECRET || '')
     url.searchParams.set('tabelas', TABELAS.join(','))
 
-    const resposta = await fetch(url.toString(), {
+    const resposta = await requisitarApi(url.toString(), {
       method: 'GET'
     })
 
@@ -881,34 +922,30 @@ const buscarLancamentosParaConferencia = async () => {
   url.searchParams.set('modo', 'pullBatch')
   url.searchParams.set('tabelas', 'lancamentos')
   url.searchParams.set('_conferencia', String(Date.now()))
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 30000)
-  try {
-    const resposta = await fetch(url.toString(), { cache: 'no-store', signal: controller.signal })
-    const dados = await lerRespostaJson(resposta)
-    if (!resposta.ok || dados.erro || !Array.isArray(dados.tabelas?.lancamentos)) {
-      throw new Error('Não foi possível confirmar os lançamentos na base das notificações.')
-    }
-    return dados.tabelas.lancamentos
-  } catch (erro) {
-    if (erro.name === 'AbortError') throw new Error('O servidor não respondeu à conferência em 30 segundos.')
-    throw erro
-  } finally {
-    clearTimeout(timer)
+  const resposta = await requisitarApi(url.toString())
+  const dados = await lerRespostaJson(resposta)
+  if (!resposta.ok || dados.erro || !Array.isArray(dados.tabelas?.lancamentos)) {
+    throw new Error('Não foi possível confirmar os lançamentos na base das notificações.')
   }
+  return dados.tabelas.lancamentos
 }
 
 // Read-only: never replace or erase the phone's payments during diagnosis.
 export const conferirPagamentosServidor = async () => {
-  const remotos = await buscarLancamentosParaConferencia()
-  const locais = (await db.lancamentos.toArray()).filter(item => !item.deletedAt)
-  const divergencias = compararPagamentos(locais, remotos)
-  const pendencias = await contarPendenciasSync()
-  return { divergencias, ...pendencias, conferidos: locais.length, verificadoEm: new Date().toISOString() }
+  await reservarConferencia()
+  try {
+    const remotos = await buscarLancamentosParaConferencia()
+    const locais = (await db.lancamentos.toArray()).filter(item => !item.deletedAt)
+    const divergencias = compararPagamentos(locais, remotos)
+    const pendencias = await contarPendenciasSync()
+    return { divergencias, ...pendencias, conferidos: locais.length, verificadoEm: new Date().toISOString() }
+  } finally {
+    conferenciaEmAndamento = false
+  }
 }
 
 export const reenviarPagamentoConferido = async (divergencia) => {
-  if (sincronizando || pullInicialExecutando) throw new Error('Aguarde a sincronização em andamento e tente novamente.')
+  await reservarConferencia()
   sincronizando = true
   atualizarEstadoGlobalSync({ sincronizando: true })
   try {
@@ -923,15 +960,13 @@ export const reenviarPagamentoConferido = async (divergencia) => {
     // Preserve all server fields; only apply the confirmed payment from this device.
     const enviado = { ...remoto, status: local.status, dataPagamento: local.dataPagamento,
       updatedAt: new Date().toISOString(), syncStatus: 'synced' }
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 30000)
-    try {
-      const resposta = await fetch(API_URL, { method: 'POST', signal: controller.signal,
+    {
+      const resposta = await requisitarApi(API_URL, { method: 'POST',
         headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({secret:API_SECRET, tabela:'lancamentos', registros:[enviado], deviceId:obterDeviceId()}) })
       const dados = await lerRespostaJson(resposta)
       if (!resposta.ok || dados.erro || dados.sucesso !== true) throw new Error('O servidor não confirmou o recebimento do pagamento.')
-    } finally { clearTimeout(timer) }
+    }
     const confirmados = (await buscarLancamentosParaConferencia()).filter(item => item.uuid === enviado.uuid)
     if (confirmados.length !== 1 || !mesmoPagamento(enviado, confirmados[0])) {
       throw new Error('O servidor recebeu o pedido, mas o pagamento ainda não foi confirmado na leitura. Seus dados locais foram preservados.')
@@ -944,6 +979,7 @@ export const reenviarPagamentoConferido = async (divergencia) => {
     return {sucesso:true}
   } finally {
     sincronizando = false
+    conferenciaEmAndamento = false
     atualizarEstadoGlobalSync({ sincronizando: false })
   }
 }

@@ -203,7 +203,8 @@ const testarNotificacao = async () => {
       <CardPremium className="space-y-3">
         <p className="font-black text-[#F4FFF8]">Conferência dos pagamentos</p>
         <p className="text-sm text-[#91A99C]">Compara este aparelho com a base usada nas notificações, sem alterar seus dados.</p>
-        <button disabled={conferindo || Boolean(reenviando)} onClick={conferir} className="w-full rounded-2xl border border-[#3AF2A1]/40 px-4 py-3 text-sm font-bold text-[#3AF2A1] disabled:opacity-50">{conferindo ? 'Conferindo…' : 'Conferir pagamentos no servidor'}</button>
+        <button disabled={conferindo || Boolean(reenviando)} onClick={conferir} className="w-full rounded-2xl border border-[#3AF2A1]/40 px-4 py-3 text-sm font-bold text-[#3AF2A1] disabled:opacity-50">{conferindo ? 'Aguardando e conferindo…' : 'Conferir pagamentos no servidor'}</button>
+        {(conferindo || reenviando) && <p role="status" className="text-xs text-[#91A99C]">Aguardando a sincronização atual, se houver. Cada consulta pode levar até 60 segundos. Mantenha o app aberto.</p>}
         {resultadoReenvio && <p role="status" className="text-sm text-[#3AF2A1]">{resultadoReenvio}</p>}
         {erroConferencia && <p role="alert" className="text-sm text-red-300">{erroConferencia}</p>}
         {conferencia && <div className="space-y-3" role="status">
