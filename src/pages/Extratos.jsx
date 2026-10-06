@@ -22,6 +22,7 @@ import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
 import { formatarDataGrupo, normalizarDataCivil } from '../utils/datas'
 import { exportarExtratoExcel } from '../utils/exportarExtratoExcel'
+import { filtrarTimelineExcel } from '../utils/filtrarTimelineExcel'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -230,6 +231,7 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
   const [filtrosAbertos, setFiltrosAbertos] = useState(false)
   const [expandidoId, setExpandidoId] = useState(null)
   const [faturaExpandidaId, setFaturaExpandidaId] = useState(null)
+  const [modalExcel, setModalExcel] = useState(false)
   const [compartilhandoExcel, setCompartilhandoExcel] = useState(false)
 
   const [modalPagamento, setModalPagamento] = useState(null)
@@ -621,23 +623,26 @@ cartao: lancamento.cartao,
     setFiltroSubcategoriaId('todos')
   }
 
-  const compartilharExtratoExcel = async () => {
+  const compartilharExtratoExcel = async (escopoExcel) => {
   if (compartilhandoExcel) return
 
-  if (timelineExtrato.length === 0) {
+  const timelineSelecionada = filtrarTimelineExcel(timelineExtrato, escopoExcel)
+  if (timelineSelecionada.length === 0) {
     alert('Não há lançamentos para compartilhar com os filtros atuais.')
     return
   }
 
+  setModalExcel(false)
   setCompartilhandoExcel(true)
 
   try {
     await exportarExtratoExcel({
-      timelineExtrato,
+      timelineExtrato: timelineSelecionada,
       categorias,
       subcategorias,
       cartoes,
       filtros: {
+        escopoExcel,
         mesAtual,
         filtroTipo,
         filtroPagamento,
@@ -1163,7 +1168,7 @@ cartao: lancamento.cartao,
 
         <button
           type="button"
-          onClick={compartilharExtratoExcel}
+          onClick={() => setModalExcel(true)}
           disabled={compartilhandoExcel || timelineExtrato.length === 0}
           className="
             flex min-h-[44px] w-full items-center justify-center gap-2
@@ -1255,6 +1260,28 @@ cartao: lancamento.cartao,
             salvandoEditor={salvandoEditor}
           />
         )}
+
+      {modalExcel && (
+        <div className="fixed inset-0 z-[90] flex items-end justify-center bg-black/70 px-4 pb-4 backdrop-blur-sm" onKeyDown={(event) => { if (event.key === 'Escape') setModalExcel(false) }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="excel-titulo" className="w-full max-w-md space-y-4 rounded-3xl border border-[#1C3D2E] bg-[#07140D] p-5">
+            <div className="flex items-center justify-between">
+              <h2 id="excel-titulo" className="text-lg font-black text-[#F4FFF8]">Enviar Excel</h2>
+              <button type="button" autoFocus aria-label="Fechar seleção do Excel" onClick={() => setModalExcel(false)} className="p-2 text-[#91A99C]"><X size={20} /></button>
+            </div>
+            <p className="text-sm text-[#91A99C]">Quais lançamentos deseja incluir? O mês e os filtros atuais serão mantidos.</p>
+            {[
+              ['todas', 'Todas', 'Inclui parceladas, lançamentos únicos e recorrências mensais.'],
+              ['parceladas', 'Só parceladas', 'Somente lançamentos com mais de uma parcela.'],
+              ['unicos', 'Só lançamentos únicos', 'Sem parcelamento nem recorrência mensal.']
+            ].map(([escopo, titulo, descricao]) => (
+              <button key={escopo} type="button" onClick={() => compartilharExtratoExcel(escopo)} className="w-full rounded-2xl border border-[#1C3D2E] bg-black/40 p-4 text-left transition active:scale-[0.98]">
+                <span className="block font-black text-[#3AF2A1]">{titulo}</span>
+                <span className="mt-1 block text-xs text-[#91A99C]">{descricao}</span>
+              </button>
+            ))}
+          </section>
+        </div>
+      )}
 
       {modalPagamento && (
         <ModalPagamentoFatura

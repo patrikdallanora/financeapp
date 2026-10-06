@@ -254,6 +254,7 @@ const preencherCategorias = (
 }
 
 const montarDescricaoFiltros = ({
+  escopoExcel,
   mesAtual,
   filtroTipo,
   filtroPagamento,
@@ -268,6 +269,8 @@ const montarDescricaoFiltros = ({
   cartoes
 }) => {
   const partes = []
+  const escopos = { todas: 'Todas', parceladas: 'Só parceladas', unicos: 'Só lançamentos únicos' }
+  if (escopos[escopoExcel]) partes.push(`Lançamentos: ${escopos[escopoExcel]}`)
 
   if (mesAtual) {
     partes.push(`Período: ${mesAtual}`)
