@@ -1,6 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import webPush from 'web-push'
+import { hojeISO } from '../lib/alertasFinanceiros.js'
 
 test('cron não envia cobrança quitada e envia somente o saldo parcial', async (t) => {
   const keys = webPush.generateVAPIDKeys()
@@ -26,7 +27,7 @@ test('cron não envia cobrança quitada e envia somente o saldo parcial', async 
       : { tabelas: {
         cartoes: [{ uuid: 'cartao', diaVencimento: 1 }],
         lancamentos: [1, 2].map((uuid) => ({ uuid, tipo: 'despesa', status: 'pendente',
-          metodoPagamento: 'cartao', cartaoUuid: 'cartao', faturaRef: '2020-01', valor: 100,
+          metodoPagamento: 'cartao', cartaoUuid: 'cartao', faturaRef: hojeISO().slice(0, 7), valor: 100,
           faturaValorPago: pago }))
       } }
     return { ok: true, text: async () => JSON.stringify(dados) }

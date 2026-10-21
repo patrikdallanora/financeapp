@@ -40,7 +40,7 @@ test('despesas pagas, excluídas e receitas não geram cobrança', () => {
   assert.equal(alerta([{ ...despesa, status: 'pago' }, { ...despesa, dataPagamento: '28/09/2026' }, { ...despesa, deletedAt: '2026-09-27' }, { ...despesa, tipo: 'receita' }]).deveNotificar, false)
 })
 test('despesas realmente pendentes respeitam hoje, atrasadas e próximos cinco dias', () => {
-  const resultado = alerta(['2026-09-27', '2026-09-28', '2026-10-03', '2026-10-04'].map((dataCompetencia) => compra({ metodoPagamento: 'pix', dataCompetencia })))
+  const resultado = alerta(['2025-09-27', '2026-08-27', '2026-09-27', '2026-09-28', '2026-09-30', '2026-10-03', '2026-10-04'].map((dataCompetencia) => compra({ metodoPagamento: 'pix', dataCompetencia })))
   assert.deepEqual(resultado.resumo, { vencidas: 1, vencendoHoje: 1, vencendoProximosDias: 1, faturasVencidas: 0, faturasVencendoProximosDias: 0 })
 })
 test('data de São Paulo independe do fuso do servidor', () => {
@@ -66,4 +66,18 @@ test('conflitos não são marcados como sincronizados', () => {
   const local = { uuid: '1', syncStatus: 'conflict' }
   confirmarRegistroEnviado(local, { ...local, syncStatus: 'pending' }, 'agora')
   assert.equal(local.syncStatus, 'conflict')
+})
+
+test('faturas de outros meses e anos não geram notificações', () => {
+  const resultado = alerta(['2025-09', '2026-08', '2026-10', '2027-09'].map((faturaRef) => compra({ faturaRef })))
+  assert.equal(resultado.deveNotificar, false)
+  assert.equal(resultado.corpo, '')
+})
+
+test('virada do ano limita próximos dias ao mês corrente', () => {
+  const resultado = calcularAlertas({ cartoes: [{ ...cartoes[0], diaVencimento: 1 }], lancamentos: [
+    ...['2025-12-01', '2026-12-01', '2026-12-31', '2027-01-01'].map((dataCompetencia) => compra({ metodoPagamento: 'pix', dataCompetencia })),
+    compra({ faturaRef: '2026-12' }), compra({ faturaRef: '2027-01' })
+  ] }, '2026-12-30')
+  assert.deepEqual(resultado.resumo, { vencidas: 1, vencendoHoje: 0, vencendoProximosDias: 1, faturasVencidas: 1, faturasVencendoProximosDias: 0 })
 })
