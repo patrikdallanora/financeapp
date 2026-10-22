@@ -11,6 +11,7 @@ import Cartoes from './pages/Cartoes'
 import Metas from './pages/Metas'
 import Categorias from './pages/Categorias'
 import Configuracoes from './pages/Configuracoes'
+import Assistente from './pages/Assistente'
 
 import { BottomNav } from './components/BottomNav'
 import { ConflictBanner } from './components/ConflictBanner'
@@ -144,6 +145,8 @@ function App() {
         return <Categorias />
       case 'config':
         return <Configuracoes />
+      case 'assistente':
+        return <Assistente />
       default:
         return (
           <Dashboard

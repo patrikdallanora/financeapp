@@ -3,7 +3,8 @@ import {
   CreditCard,
   Target,
   Settings,
-  FolderTree
+  FolderTree,
+  Bot
 } from 'lucide-react'
 
 export function BottomNav({ current, onChange }) {
@@ -12,6 +13,7 @@ export function BottomNav({ current, onChange }) {
     { key: 'cartoes', icon: CreditCard, label: 'Cartões' },
     { key: 'metas', icon: Target, label: 'Metas' },
     { key: 'categorias', icon: FolderTree, label: 'Categorias' },
+    { key: 'assistente', icon: Bot, label: 'Assistente' },
     { key: 'config', icon: Settings, label: 'Config' }
   ]
 
@@ -24,6 +26,8 @@ export function BottomNav({ current, onChange }) {
         return (
           <button
             key={item.key}
+            aria-current={ativo ? 'page' : undefined}
+            aria-label={item.label}
             onClick={() => onChange(item.key)}
             className={`flex flex-1 flex-col items-center gap-1 text-[10px] font-semibold transition ${
               ativo ? 'text-[#00E676]' : 'text-[#8FA99B]'
