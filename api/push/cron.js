@@ -1,5 +1,6 @@
 import { calcularAlertas, hojeISO } from '../../lib/alertasFinanceiros.js'
 import webPush from 'web-push'
+import { MIGRATION_CAPTURE_MODE, MIGRATION_MESSAGE } from '../../lib/migrationMode.js'
 
 const API_URL = process.env.VITE_SHEETS_API_URL
 const API_SECRET = process.env.VITE_API_SECRET
@@ -59,6 +60,11 @@ const enviarPush = async (subscription, payload) => {
 }
 
 export default async function handler(req, res) {
+  if (MIGRATION_CAPTURE_MODE) return res.status(200).json({ sucesso: true, notificou: false, pausado: true, motivo: MIGRATION_MESSAGE })
+  return enviarAlertasProgramados(req, res)
+}
+
+export async function enviarAlertasProgramados(req, res) {
   try {
     if (!API_URL || !API_SECRET) {
       return res.status(500).json({

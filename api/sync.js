@@ -1,4 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
+import { MIGRATION_CAPTURE_MODE, MIGRATION_MESSAGE } from '../lib/migrationMode.js'
 
 export const config = { maxDuration: 60 }
 const tabelas = new Set(['usuarios', 'cartoes', 'lancamentos', 'faturas', 'categorias', 'subcategorias', 'metas'])
@@ -9,6 +10,14 @@ const autorizado = (a, b) => {
 
 // Fixed upstream, same credential as the existing API, no Google browser cookies.
 export default async function handler(req, res) {
+  if (MIGRATION_CAPTURE_MODE) {
+    res.setHeader('Cache-Control', 'no-store')
+    return res.status(503).json({ erro: MIGRATION_MESSAGE, pausado: true })
+  }
+  return handleSyncRequest(req, res)
+}
+
+export async function handleSyncRequest(req, res) {
   res.setHeader('Cache-Control', 'no-store')
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ erro: 'Método não permitido.' })
   const secret = process.env.VITE_API_SECRET

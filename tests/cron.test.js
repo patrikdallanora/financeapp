@@ -33,7 +33,7 @@ test('cron não envia cobrança quitada e envia somente o saldo parcial', async 
     return { ok: true, text: async () => JSON.stringify(dados) }
   })
   t.mock.method(webPush, 'sendNotification', async (subscription, payload) => { envios.push(JSON.parse(payload)) })
-  const { default: handler } = await import('../api/push/cron.js')
+  const { enviarAlertasProgramados: handler } = await import('../api/push/cron.js')
   const executar = async () => {
     const res = { status(code) { this.code = code; return this }, json(body) { this.body = body; return this } }
     await handler({}, res)

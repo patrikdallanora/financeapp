@@ -1,16 +1,11 @@
 import webPush from 'web-push'
+import { MIGRATION_CAPTURE_MODE, MIGRATION_MESSAGE } from '../../lib/migrationMode.js'
 
 const API_URL = process.env.VITE_SHEETS_API_URL
 const API_SECRET = process.env.VITE_API_SECRET
 const VAPID_PUBLIC_KEY = process.env.VITE_VAPID_PUBLIC_KEY
 const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY
 const VAPID_SUBJECT = process.env.VAPID_SUBJECT
-
-webPush.setVapidDetails(
-  VAPID_SUBJECT,
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY
-)
 
 const buscarJson = async (url) => {
   const resposta = await fetch(url)
@@ -36,7 +31,9 @@ const buscarSubscriptions = async () => {
 }
 
 export default async function handler(req, res) {
+  if (MIGRATION_CAPTURE_MODE) return res.status(200).json({ sucesso: true, notificou: false, pausado: true, motivo: MIGRATION_MESSAGE })
   try {
+    webPush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)
     const subscriptions = await buscarSubscriptions()
 
     const payload = {

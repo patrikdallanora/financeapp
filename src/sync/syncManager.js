@@ -2,6 +2,7 @@ import { recuperarPagamentoLocal } from './recuperarPagamentoLocal.js'
 import { compararPagamentos, podeReenviarPagamento, mesmoPagamento } from './verificarPagamentos.js'
 import { confirmarRegistroEnviado } from './confirmarRegistroEnviado.js'
 import { db } from '../db/database'
+import { MIGRATION_CAPTURE_MODE, MIGRATION_MESSAGE, exigirEscritaLiberada } from '../../lib/migrationMode.js'
 
 const API_URL = import.meta.env.VITE_SHEETS_API_URL
 const API_SECRET = import.meta.env.VITE_API_SECRET
@@ -29,6 +30,7 @@ let conferenciaEmAndamento = false
 let syncSolicitada = false
 
 const requisitarApi = async (url, opcoes = {}) => {
+  exigirEscritaLiberada()
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), 60000)
   const abortar = () => controller.abort()
@@ -600,6 +602,7 @@ const recuperarBaixasAntigas = async () => {
 }
 
 export const executarSync = async () => {
+  if (MIGRATION_CAPTURE_MODE) return { sucesso: false, pausado: true, erro: MIGRATION_MESSAGE }
   const config = verificarConfiguracaoSync()
 
   if (!config.ok) {
@@ -703,102 +706,11 @@ export const agendarSync = () => {
 
 
 export const restaurarBaseLocalDoSheets = async () => {
-  const config = verificarConfiguracaoSync()
-
-  if (!config.ok) {
-    throw new Error(config.erro)
-  }
-
-  atualizarEstadoGlobalSync({
-    sincronizando: true
-  })
-
-  try {
-    // limpa tabelas locais
-    for (const tabela of TABELAS) {
-      await db[tabela].clear()
-    }
-
-    await db.syncLog.clear()
-
-    // limpa metas locais
-    localStorage.removeItem(CHAVE_META_LOCAL)
-    localStorage.removeItem(CHAVE_ULTIMO_PULL_INICIAL)
-
-    TABELAS.forEach((tabela) => {
-      localStorage.removeItem(obterChaveUltimoPull(tabela))
-    })
-
-    // baixa tudo do sheets
-    const url = new URL(API_URL)
-
-    url.searchParams.set('modo', 'pullBatch')
-    url.searchParams.set('secret', API_SECRET || '')
-    url.searchParams.set('tabelas', TABELAS.join(','))
-
-    const resposta = await requisitarApi(url.toString(), {
-      method: 'GET'
-    })
-
-    const dados = await lerRespostaJson(resposta)
-
-    if (!resposta.ok || dados.erro) {
-      throw new Error(dados.erro || `Erro HTTP ${resposta.status}`)
-    }
-
-    if (!dados.sucesso || !dados.tabelas) {
-      throw new Error('Resposta inesperada na restauração.')
-    }
-
-    for (const tabela of TABELAS) {
-      const registros = dados.tabelas[tabela] || []
-
-      if (!Array.isArray(registros)) continue
-
-      for (const registro of registros) {
-        const local = prepararRegistroRestauracaoParaLocal(registro)
-        await db[tabela].put(local)
-      }
-
-      const maiorUpdatedAt = registros.reduce((maior, item) => {
-        if (!item.updatedAt) return maior
-        return !maior || item.updatedAt > maior
-          ? item.updatedAt
-          : maior
-      }, '')
-
-      if (maiorUpdatedAt) {
-        salvarUltimoPull(tabela, maiorUpdatedAt)
-      }
-    }
-
-    if (dados.meta) {
-      salvarMetaLocal(dados.meta)
-    }
-
-    salvarUltimoPullInicial()
-
-    atualizarEstadoGlobalSync({
-      sincronizando: false,
-      ultimaSincronizacao: new Date().toISOString(),
-      ultimoErro: null
-    })
-
-    return {
-      sucesso: true
-    }
-  } catch (err) {
-    atualizarEstadoGlobalSync({
-      sincronizando: false,
-      ultimoErro: err.message
-    })
-
-    throw err
-  }
+  throw new Error('Restauração substitutiva desativada. Preserve e reconcilie o backup antes de recuperar dados.')
 }
 
-
 export const iniciarAutoSync = ({ executarAoIniciar = false } = {}) => {
+  if (MIGRATION_CAPTURE_MODE) return
   if (autoSyncIniciado) return
 
   autoSyncIniciado = true

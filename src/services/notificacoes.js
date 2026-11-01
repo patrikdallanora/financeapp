@@ -1,3 +1,4 @@
+import { exigirEscritaLiberada } from '../../lib/migrationMode.js'
 const API_URL = import.meta.env.VITE_SHEETS_API_URL
 const API_SECRET = import.meta.env.VITE_API_SECRET
 const VAPID_PUBLIC_KEY = import.meta.env.VITE_VAPID_PUBLIC_KEY
@@ -60,6 +61,7 @@ export const obterStatusNotificacoes = () => {
 }
 
 export const ativarNotificacoes = async () => {
+  exigirEscritaLiberada()
   if (!notificacoesSuportadas()) {
     throw new Error('Este dispositivo/navegador não suporta notificações push.')
   }

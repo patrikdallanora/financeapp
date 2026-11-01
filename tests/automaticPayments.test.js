@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { recuperarPagamentoLocal } from '../src/sync/recuperarPagamentoLocal.js'
-import handler from '../api/sync.js'
+import { handleSyncRequest as handler } from '../api/sync.js'
 
 test('recupera baixa antiga preservando campos remotos e chave local', () => {
   const local={id:7,uuid:'a',status:'pago',valor:50,metodoPagamento:'pix',dataPagamento:'2026-09-08',syncStatus:'synced'}

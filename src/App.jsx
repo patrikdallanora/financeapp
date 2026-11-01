@@ -12,6 +12,8 @@ import Metas from './pages/Metas'
 import Categorias from './pages/Categorias'
 import Configuracoes from './pages/Configuracoes'
 import Assistente from './pages/Assistente'
+import Preservacao from './pages/Preservacao'
+import { MIGRATION_CAPTURE_MODE } from '../lib/migrationMode.js'
 
 import { BottomNav } from './components/BottomNav'
 import { ConflictBanner } from './components/ConflictBanner'
@@ -35,7 +37,7 @@ function App() {
   const pullInicialExecutado = useRef(false)
 
   useEffect(() => {
-    if (!ready || !authenticated || pullInicialExecutado.current) return
+    if (MIGRATION_CAPTURE_MODE || !ready || !authenticated || pullInicialExecutado.current) return
 
     pullInicialExecutado.current = true
 
@@ -66,6 +68,10 @@ function App() {
       clearTimeout(timerLoading)
     }
   }, [ready, authenticated])
+
+  if (error) {
+    return <div role="alert" className="min-h-screen bg-black p-8 text-red-300">Erro ao abrir o banco local. Não limpe os dados nem reinstale o app.</div>
+  }
 
   if (loading || !ready) {
     return (
@@ -98,6 +104,8 @@ function App() {
       />
     )
   }
+
+  if (MIGRATION_CAPTURE_MODE) return <Preservacao />
 
   const abrirLancamento = (config) => {
     setConfigLancamento(config)
