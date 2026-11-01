@@ -19,6 +19,8 @@ O envelope JSON contém versão, payload tipado e SHA-256. O snapshot transacion
 
 O teste de restauração usa um banco isolado, vazio e com schema compatível. Nunca substitui a origem nem mescla por nome, timestamp ou maior valor pago. Duplicações são preservadas para reconciliação posterior.
 
+Após receber os arquivos, executar `node tools/verify-device-backup.mjs ARQUIVO.json` para verificar SHA-256 e reconstrução integral em IndexedDB simulado isolado. O comando imprime somente manifesto e contagens. A função `reconcileSnapshots` compara as versões preservando dados exclusivos, duplicações, nomes divergentes e relações por origem; não efetua mescla. Receber o arquivo não autoriza ignorar conflitos.
+
 ## Planilha
 
 O backup operacional deve conter cópia nativa no Drive e XLSX em armazenamento privado externo ao repositório, com verificação do ZIP e manifesto de hashes. `python tools/inspect-sheet-backup.py INPUT.xlsx PRIVATE_OUTPUT_DIR` inspeciona o arquivo sem alterá-lo e produz arquivo privado de células e manifesto, sem imprimir linhas financeiras ou credenciais push.
