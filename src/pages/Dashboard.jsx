@@ -10,6 +10,7 @@ import {
 } from 'lucide-react'
 
 import { db } from '../db/database'
+import { resolveEntity } from '../../lib/resolveEntity.js'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -59,11 +60,7 @@ const obterChaveUsuarioLancamento = (lancamento, usuarios = []) => {
 }
 
 const encontrarCategoriaDoLancamento = (categorias, lancamento) => {
-  return categorias.find(
-    (categoria) =>
-      categoria.uuid === lancamento.categoriaUuid ||
-      Number(categoria.id) === Number(lancamento.categoriaId)
-  )
+  return resolveEntity(categorias, lancamento, 'categoria')
 }
 
 const obterDiaFechamentoCartao = (cartao) => {
@@ -451,11 +448,7 @@ const mesReferencia = mesSelecionado || mesReferenciaPadrao
           mesReferenciaDashboard: mesReferencia
         })
 
-        const categoria = categorias.find(
-  (item) =>
-    item.uuid === meta.categoriaUuid ||
-    Number(item.id) === Number(meta.categoriaId)
-)
+        const categoria = resolveEntity(categorias, meta, 'categoria')
 
         return {
           ...meta,

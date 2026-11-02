@@ -12,6 +12,7 @@ import { distribuirParcelas, somarMeses } from '../utils/parcelamento'
 import { FiltroSegmentado } from '../components/FiltroSegmentado'
 import { TopoTela } from '../components/TopoTela'
 import { IconeCategoria } from '../components/IconeCategoria'
+import { resolveEntity } from '../../lib/resolveEntity.js'
 
 const formatarCampoMoeda = (valor) => {
   const apenasNumeros = String(valor || '').replace(/\D/g, '')
@@ -209,23 +210,9 @@ const moeda = (numero) => numero.toLocaleString('pt-BR', { style: 'currency', cu
 
       if (!chave || mapa.has(chave)) continue
 
-      const categoria = categorias.find(
-  (item) =>
-    item.uuid === lancamento.categoriaUuid ||
-    item.id === Number(lancamento.categoriaId)
-)
-
-const subcategoria = subcategorias.find(
-  (item) =>
-    item.uuid === lancamento.subcategoriaUuid ||
-    item.id === Number(lancamento.subcategoriaId)
-)
-
-const cartao = cartoes?.find(
-  (item) =>
-    item.uuid === lancamento.cartaoUuid ||
-    item.id === Number(lancamento.cartaoId)
-)
+      const categoria = resolveEntity(categorias, lancamento, 'categoria')
+      const subcategoria = resolveEntity(subcategorias, lancamento, 'subcategoria')
+      const cartao = resolveEntity(cartoes, lancamento, 'cartao')
 
       mapa.set(chave, {
         descricao: lancamento.descricao,

@@ -14,6 +14,7 @@ import {
 import { db, criarRegistroBase, agoraISO, softDelete } from '../db/database'
 import { agendarSync } from '../sync/syncManager'
 import { IconeCategoria } from '../components/IconeCategoria'
+import { resolveEntity } from '../../lib/resolveEntity.js'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -51,27 +52,15 @@ const categoriaEhReembolso = (categoria) => {
 }
 
 const encontrarCategoriaDoLancamento = (categorias, lancamento) => {
-  return categorias.find(
-    (categoria) =>
-      categoria.uuid === lancamento.categoriaUuid ||
-      Number(categoria.id) === Number(lancamento.categoriaId)
-  )
+  return resolveEntity(categorias, lancamento, 'categoria')
 }
 
 const encontrarCategoriaDaMeta = (categorias, meta) => {
-  return categorias.find(
-    (categoria) =>
-      categoria.uuid === meta.categoriaUuid ||
-      Number(categoria.id) === Number(meta.categoriaId)
-  )
+  return resolveEntity(categorias, meta, 'categoria')
 }
 
 const encontrarSubcategoriaDaMeta = (subcategorias, meta) => {
-  return subcategorias.find(
-    (subcategoria) =>
-      subcategoria.uuid === meta.subcategoriaUuid ||
-      Number(subcategoria.id) === Number(meta.subcategoriaId)
-  )
+  return resolveEntity(subcategorias, meta, 'subcategoria')
 }
 
 const obterMesAtual = () => new Date().toISOString().slice(0, 7)

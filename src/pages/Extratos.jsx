@@ -23,6 +23,7 @@ import { IconeCategoria } from '../components/IconeCategoria'
 import { formatarDataGrupo, normalizarDataCivil } from '../utils/datas'
 import { exportarExtratoExcel } from '../utils/exportarExtratoExcel'
 import { filtrarTimelineExcel } from '../utils/filtrarTimelineExcel'
+import { resolveEntity } from '../../lib/resolveEntity.js'
 
 const formatarMoeda = (valor) => {
   return Number(valor || 0).toLocaleString('pt-BR', {
@@ -329,23 +330,9 @@ export default function Extratos({ filtroInicial = 'todos', onVoltar }) {
     if (!lancamentos || !categorias || !subcategorias || !cartoes) return []
 
     return lancamentos.map((lancamento) => {
-      const categoria = categorias.find(
-  (item) =>
-    item.uuid === lancamento.categoriaUuid ||
-    item.id === Number(lancamento.categoriaId)
-)
-
-const subcategoria = subcategorias.find(
-  (item) =>
-    item.uuid === lancamento.subcategoriaUuid ||
-    item.id === Number(lancamento.subcategoriaId)
-)
-
-const cartao = cartoes.find(
-  (item) =>
-    item.uuid === lancamento.cartaoUuid ||
-    item.id === Number(lancamento.cartaoId)
-)
+      const categoria = resolveEntity(categorias, lancamento, 'categoria')
+      const subcategoria = resolveEntity(subcategorias, lancamento, 'subcategoria')
+      const cartao = resolveEntity(cartoes, lancamento, 'cartao')
 
       return {
         ...lancamento,

@@ -1,11 +1,12 @@
+import { resolveEntity } from '../../lib/resolveEntity.js'
+
 export const mesAnterior = (referencia) => {
   const [ano, mes] = referencia.split('-').map(Number)
   return `${mes === 1 ? ano - 1 : ano}-${String(mes === 1 ? 12 : mes - 1).padStart(2, '0')}`
 }
 
 const encontrarCategoria = (categorias, item) =>
-  categorias.find((c) => item.categoriaUuid && c.uuid === item.categoriaUuid) ||
-  categorias.find((c) => item.categoriaId != null && Number(c.id) === Number(item.categoriaId))
+  resolveEntity(categorias, item, 'categoria')
 
 export const selecionarLancamentosMes = (lancamentos, categorias, mes) => lancamentos.filter((item) => {
   if (item.deletedAt) return false
@@ -27,8 +28,10 @@ export const compararCategorias = (atual, anterior, categorias) => {
   for (const [itens, campo] of [[atual, 'total'], [anterior, 'anterior']]) {
     for (const item of itens) {
       if (item.tipo !== 'despesa') continue
-      const categoria = encontrarCategoria(categorias, item)
-      if (!categoria) continue
+      const categoria = encontrarCategoria(categorias, item) || {
+        uuid: `unresolved:${item.categoriaUuid || item.categoriaId || 'none'}`,
+        nome: 'Categoria indisponível', referenciaNaoResolvida: true
+      }
       const chave = categoria.uuid || categoria.id
       const grupo = mapa.get(chave) || { ...categoria, total: 0, anterior: 0 }
       grupo[campo] += Math.round(Number(item.valor || 0) * 100)
