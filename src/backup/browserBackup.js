@@ -1,12 +1,31 @@
 import Dexie from 'dexie'
 import { db } from '../db/database.js'
 import { createBackupService } from './deviceBackup.js'
+import { applyCategoryRepair } from './categoryRepair.js'
 
 const archive = new Dexie('FinanceAppPreservationBackups')
 archive.version(1).stores({ snapshots: 'id, kind, createdAt' })
 
 export const deviceBackup = createBackupService({ db, archive,
   storage: localStorage, origin: window.location.origin })
+
+let categoryRepairPromise
+export function repairCategoriesOnDevice() {
+  if (categoryRepairPromise) return categoryRepairPromise
+  categoryRepairPromise = (async () => {
+    const before = await deviceBackup.capture({ kind: 'before-category-repair' })
+    const response = await fetch('/api/category-repair', { method: 'POST', cache: 'no-store',
+      headers: { 'X-Financeapp-Token': import.meta.env.VITE_API_SECRET || '' } })
+    const data = await response.json()
+    if (!response.ok || data.sucesso !== true) throw new Error(data.erro || 'Catálogo indisponível.')
+    const result = await applyCategoryRepair(db, before.snapshot, data.categorias)
+    let afterBackupSaved = true
+    try { await deviceBackup.capture({ kind: 'after-category-repair' }) }
+    catch { afterBackupSaved = false }
+    return { ...result.summary, pending: result.pending.length, afterBackupSaved }
+  })().finally(() => { categoryRepairPromise = null })
+  return categoryRepairPromise
+}
 
 export function prepareBackupFile(backup, label) {
   const name = label.replace(/[^a-zA-Z0-9-]/g, '-').slice(0, 60) || 'aparelho'
