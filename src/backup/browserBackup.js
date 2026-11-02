@@ -1,5 +1,5 @@
 import Dexie from 'dexie'
-import { db } from '../db/database.js'
+import { legacyDb as db } from '../db/database.js'
 import { createBackupService } from './deviceBackup.js'
 import { applyCategoryRepair } from './categoryRepair.js'
 

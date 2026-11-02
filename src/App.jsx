@@ -17,6 +17,7 @@ import { MIGRATION_CAPTURE_MODE } from '../lib/migrationMode.js'
 
 import { BottomNav } from './components/BottomNav'
 import { ConflictBanner } from './components/ConflictBanner'
+import CloudAccessGate from './components/CloudAccessGate.jsx'
 
 function App() {
   const { ready, error } = useDbReady()
@@ -168,6 +169,7 @@ function App() {
   const mostrarMenu = page !== 'lancamento' && page !== 'extratos'
 
   return (
+    <CloudAccessGate>
     <div className="min-h-screen bg-black text-white">
       <ConflictBanner />
 
@@ -179,6 +181,7 @@ function App() {
 
       {mostrandoPullInicial && <LoadingPullInicial />}
     </div>
+    </CloudAccessGate>
   )
 }
 

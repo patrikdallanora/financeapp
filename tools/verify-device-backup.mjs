@@ -11,7 +11,7 @@ for (const input of inputs) {
   const envelope = JSON.parse(await fs.readFile(input, 'utf8'))
   const snapshot = await openBackup(envelope)
   const target = new Dexie(`financeapp-verification-${crypto.randomUUID()}`)
-  target.version(1).stores(Object.fromEntries(snapshot.tableNames.map(name => [name, '++id'])))
+  target.version(1).stores(Object.fromEntries(snapshot.tableNames.map(name => [name, snapshot.tableSchemas?.[name] || '++id'])))
   await target.open()
   try {
     await verifyInIsolatedDatabase(envelope, target, snapshot.databaseName || 'FinanceAppDB')

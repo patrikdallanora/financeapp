@@ -109,15 +109,15 @@ test('codec mantém tipos e identifica manifesto incompleto', async () => {
   assert.equal(captureSyncMetadata(storage(), ['lancamentos']).financeapp_session, undefined)
 })
 
-test('modo preservação bloqueia API e cron sem consultar nem gravar no Google', async t => {
+test('corte mantém API legada encerrada e cron protegido sem acessar o Google', async t => {
   let calls = 0
   t.mock.method(globalThis, 'fetch', () => { calls++; throw new Error('Rede indevida') })
   const response = () => ({ setHeader() {}, status(code) { this.code = code; return this }, json(body) { this.body = body; return this } })
   const sync = response(); await syncHandler({ method: 'POST' }, sync)
   assert.equal(sync.code, 503); assert.equal(sync.body.pausado, true)
   const cron = response(); await cronHandler({}, cron)
-  assert.equal(cron.body.notificou, false); assert.equal(cron.body.pausado, true)
+  assert.equal(cron.code, 401)
   const push = response(); await pushTestHandler({}, push)
-  assert.equal(push.body.notificou, false); assert.equal(push.body.pausado, true)
+  assert.equal(push.code, 410)
   assert.equal(calls, 0)
 })

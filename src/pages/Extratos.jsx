@@ -760,7 +760,7 @@ cartao: lancamento.cartao,
   const reabrirFatura = async (fatura) => {
     const agora = agoraISO()
 
-    for (const item of fatura.itens) {
+    await db.transaction('rw',db.lancamentos,async()=>{for (const item of fatura.itens) {
       await db.lancamentos.update(item.id, {
         faturaValorPago: 0,
         faturaFechada: false,
@@ -771,7 +771,7 @@ cartao: lancamento.cartao,
       })
     }
 
-    agendarSync()
+    });agendarSync()
   }
 
   const obterRelacionados = (lancamento, escopo) => {
@@ -930,9 +930,9 @@ cartao: lancamento.cartao,
       alteracoes.faturaFechada = false
     }
 
-    for (const lancamento of relacionados) {
+    await db.transaction('rw',db.lancamentos,async()=>{for (const lancamento of relacionados) {
       await db.lancamentos.update(lancamento.id, alteracoes)
-    }
+    }})
 
     setEditorLancamento(null)
 
@@ -1478,13 +1478,13 @@ const classeIconeLancamento = lancamentoPago
           .equals(lancamento.parcelamentoId)
           .toArray()
 
-        for (const item of relacionados) {
+        await db.transaction('rw',db.lancamentos,async()=>{for (const item of relacionados) {
           if (!item.deletedAt) {
             await softDelete('lancamentos', item.id)
           }
         }
 
-        agendarSync()
+        });agendarSync()
         return
       }
     }

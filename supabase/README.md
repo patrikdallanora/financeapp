@@ -24,9 +24,15 @@ Funções públicas são invoker. As definer ficam privadas, com search_path vaz
 
 localOutbox.js implementa alteração e fila na mesma transação Dexie, dependências de recibos e confirmação que preserva edição durante envio. Pulls têm staging separado por leitura/aba; dados e cursor são aplicados juntos, sem sobrescrever pendências. FinanceAppSupabaseDB é separado de FinanceAppDB e não cria seed duplicado.
 
-**A fachada de escrita ainda não está conectada às telas financeiras.** MIGRATION_CAPTURE_MODE continua true; API antiga, cron e sync_enabled permanecem pausados. A Preservação 3 oferece login e conferência somente de leitura. Os dois PWAs originais precisam confirmar o snapshot atual usando seus identificadores já capturados. O banco antigo permanece intacto.
+Os dois iPhones originais confirmaram o mesmo snapshot em 02/11/2026. As telas usam FinanceAppSupabaseDB por uma fachada que grava ação e fila atomicamente. A sessão da conferência é reaproveitada. A ativação inicial exige internet, autorização da base e cópia inicial verificada; depois há uso offline. O banco antigo permanece intacto. MIGRATION_CAPTURE_MODE=false prepara a interface normal; a trava de servidor sync_enabled só deve ser habilitada após verificar a publicação. LEGACY_BACKEND_DISABLED=true mantém os endpoints Sheets encerrados.
 
-Antes da virada: concluir testes autenticados nos dois iPhones, conectar todas as gravações à fachada e ao novo gerenciador, implementar resolução de conflitos, migrar notificações e cercar caminhos antigos. Só então habilitar o escritor único. Rollback após gravações novas exige preservar e reaplicar o delta.
+O gerenciador reenvia IDs estáveis, pagina o pull e retoma ao abrir ou reconectar. Conflitos mostram a versão atual e a intenção local, usam novo ID ao reaplicar e preservam edições posteriores sem ressuscitar valores descartados. Alertas usam somente dados canônicos e inscrições privadas autenticadas. O cron exige CRON_SECRET e registra uma tentativa por aparelho/dia antes de enviar; falhas incertas não são reenviadas automaticamente. Não é garantia de entrega do push. Saída da conta é local ao aparelho e desativa sua inscrição.
+
+Na virada: verificar 2/2 confirmações do snapshot, hash e contagens; ensaiar mutação/replay/conflito em transação descartada; executar testes/build; publicar e comparar hash do bundle; testar endpoints legados e cron; somente então habilitar sync_enabled. A validação de uso real da versão nova exige reabrir o ícone nos dois iPhones.
+
+Rollback: primeiro pausar sync_enabled. Antes de mudar código ou restaurar qualquer base, exportar financeapp_records com revisões, change_log, mutation_receipts, identity_aliases e backups locais completos dos dois aparelhos, incluindo outbox. Preservar os arquivos originais e criar hashes. Nunca voltar ao snapshot inicial sobre novas escritas. Reaplicar o delta com recibos/UUIDs ou corrigir a versão mantendo a base nova; não reativar o escritor Sheets em paralelo. A cópia inicial local é imutável e o menu permite exportar novas cópias sem sobrescrever a inicial. Dados remotos originais também são imutáveis.
+
+Variáveis administrativas SUPABASE_URL, SUPABASE_SECRET_KEY e CRON_SECRET existem somente no servidor da Vercel, em produção; não usar prefixo VITE_. Conferência do SDK administrativo e RPC privado foi feita sem enviar notificações. O aviso de RLS sem políticas nas tabelas privadas é intencional; a proteção adicional de senhas comprometidas não está ativada no plano atual.
 
 ## Histórico e ferramentas
 

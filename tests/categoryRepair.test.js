@@ -68,7 +68,7 @@ test('subcategoria legada sem UUID converge na primeira execução usando víncu
   assert.equal(repeated.summary.repairedLaunches, 0)
 })
 
-test('endpoint exige credencial e faz somente leitura de categorias', async t => {
+test('endpoint de correção legada fica encerrado após o corte, mesmo com credencial antiga', async t => {
   const previous = { ...process.env }
   process.env.VITE_API_SECRET = 'test-secret'
   process.env.VITE_SHEETS_API_URL = 'https://example.invalid/sheets'
@@ -86,9 +86,9 @@ test('endpoint exige credencial e faz somente leitura de categorias', async t =>
   })
   const response = () => ({ setHeader() {}, status(code) { this.code = code; return this }, json(body) { this.body = body; return this } })
   const denied = response(); await handler({ method: 'POST', headers: {} }, denied)
-  assert.equal(denied.code, 401); assert.equal(calls, 0)
+  assert.equal(denied.code, 410); assert.equal(calls, 0)
   const allowed = response(); await handler({ method: 'POST', headers: { 'x-financeapp-token': 'test-secret' } }, allowed)
-  assert.equal(allowed.code, 200); assert.deepEqual(allowed.body.categorias, catalog)
+  assert.equal(allowed.code, 410); assert.equal(calls, 0)
   assert.equal(allowed.body.lancamentos, undefined)
 })
 

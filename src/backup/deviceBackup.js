@@ -17,6 +17,7 @@ export function createBackupService({ db, archive, storage, origin, cryptoApi = 
     })
     // Hashing and archive I/O happen after the source transaction commits.
     const snapshot = { createdAt: new Date().toISOString(), databaseName: db.name, databaseVersion: db.verno,
+      tableSchemas: Object.fromEntries(db.tables.map(t=>[t.name,[t.schema.primKey.src,...t.schema.indexes.map(i=>i.src)].join(',')])),
       source: { deviceId, origin, label }, tableNames: names, tables,
       counts: Object.fromEntries(names.map(name => [name, tables[name].length])),
       metadata: captureSyncMetadata(storage, names) }

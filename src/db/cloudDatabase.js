@@ -13,6 +13,6 @@ export function createCloudDatabase(name='FinanceAppSupabaseDB'){
   syncLog:'++id,tabela,uuid,action,timestamp,deviceId,resolved',
   ...SYNC_STORES
  })
- return {raw,...createOutboxFacade(raw)}
+ return {raw,...createOutboxFacade(raw,{onEnqueue:()=>{if(typeof window!=='undefined')window.dispatchEvent(new Event('financeapp-outbox-changed'))}})}
 }
 export const cloudDatabase=createCloudDatabase()

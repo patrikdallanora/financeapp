@@ -1,8 +1,10 @@
 import { timingSafeEqual } from 'node:crypto'
+import {MIGRATION_CAPTURE_MODE} from '../lib/migrationMode.js'
 
 export const config = { maxDuration: 60 }
 
 export default async function handler(req, res) {
+  if(!MIGRATION_CAPTURE_MODE)return res.status(410).json({erro:'A correção legada foi encerrada. Atualize o aplicativo.'})
   res.setHeader('Cache-Control', 'no-store')
   if (req.method !== 'POST') return res.status(405).json({ erro: 'Método não permitido.' })
   const expected = Buffer.from(process.env.VITE_API_SECRET || '')

@@ -19,6 +19,7 @@ export function toCanonicalRecord(record,catalogs){
    source[prefix+'Uuid']=rows[0].uuid
   }
   delete source[prefix+'Id']
+  if(source[prefix+'Uuid']&&!catalogs[table].some(r=>r.uuid===source[prefix+'Uuid']))throw new Error('O vínculo não foi encontrado na base local: '+prefix)
  }
  const canonical=normalizeBusinessRecord(source)
  canonical.deletedAt=record.deletedAt||null
@@ -34,12 +35,13 @@ export function toLocalRecord(remote,catalogs,previous){
 
 // Facade centralizes all current screen writes without using collection hooks.
 // Business changes and their complete operation share one IndexedDB transaction.
-export function createOutboxFacade(raw){
+export function createOutboxFacade(raw,{onEnqueue=()=>{}}={}){
  const tables=new Map(),capturing=new WeakSet()
  const currentCapturing=()=>Dexie.currentTransaction&&capturing.has(Dexie.currentTransaction)
  const stores=()=>[...BUSINESS_TABLES.map(t=>raw.table(t)),raw.outbox,raw.syncState,raw.syncReceipts]
  async function atomic(names,operation){
   if(currentCapturing())return operation()
+  names=BUSINESS_TABLES
   return raw.transaction('rw',stores(),async()=>{
    const context=await raw.syncState.get('context')
    if(!context?.ready||!context.householdId||!context.deviceId)throw new Error('A base ainda não terminou de sincronizar.')
@@ -52,7 +54,8 @@ export function createOutboxFacade(raw){
     const changes=[]
     for(const table of names){
      const oldRows=new Map(before[table].map(r=>[r.uuid,r]))
-     if(before[table].some(r=>!catalogs[table].some(n=>n.uuid===r.uuid)))throw new Error('Exclusão física bloqueada. Use a exclusão preservada.')
+     const remaining=new Set(catalogs[table].map(r=>r.uuid))
+     if(before[table].some(r=>!remaining.has(r.uuid)))throw new Error('Exclusão física bloqueada. Use a exclusão preservada.')
      for(const row of catalogs[table]){
       const old=oldRows.get(row.uuid)
       if(same(row,old))continue
@@ -61,7 +64,7 @@ export function createOutboxFacade(raw){
       if(old&&same(payload,toCanonicalRecord(old,catalogs)))continue
       const predecessor=pending.findLast(o=>o.changes.some(c=>c.table===table&&c.uuid===row.uuid))
       const localVersion=(old?._localVersion||0)+1
-      changes.push({table,uuid:row.uuid,payload,localVersion,baseRevision:predecessor?null:old?._serverRevision||0,dependsOn:predecessor?.mutationId||null})
+      changes.push({table,uuid:row.uuid,payload,basePayload:old?toCanonicalRecord(old,catalogs):null,localVersion,baseRevision:predecessor?null:old?._serverRevision||0,dependsOn:predecessor?.mutationId||null})
       await raw.table(table).update(row.id,{_localVersion:localVersion,_serverRevision:old?._serverRevision||0,syncStatus:'pending'})
      }
     }
@@ -71,7 +74,7 @@ export function createOutboxFacade(raw){
     }
     return result
    }finally{capturing.delete(tx)}
-  })
+  }).then(result=>{try{onEnqueue()}catch{}return result})
  }
  const mutations=new Set(['add','put','update','bulkAdd','bulkPut'])
  const forbidden=new Set(['delete','bulkDelete','clear'])
@@ -106,8 +109,9 @@ export async function freezeNextOperation(raw){
    let revision=c.baseRevision
    if(c.dependsOn){
     const receipt=await raw.syncReceipts.get(c.dependsOn)
-    if(receipt?.result.status!=='applied')return null
-    const previous=receipt.result.records.find(r=>r.table_name===c.table&&r.uuid===c.uuid)
+    const records=receipt?.result.status==='applied'?receipt.result.records:receipt?.resolution?.choice==='server'?receipt.resolution.records:null
+    if(!records)return null
+    const previous=records.find(r=>r.table_name===c.table&&r.uuid===c.uuid)
     if(!previous)throw new Error('Recibo anterior incompleto.')
     revision=previous.revision
    }

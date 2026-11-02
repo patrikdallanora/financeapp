@@ -1,7 +1,9 @@
+import { MIGRATION_CAPTURE_MODE } from '../../lib/migrationMode.js'
+import { cloudDatabase } from './cloudDatabase.js'
 import Dexie from 'dexie'
 import { v4 as uuidv4 } from 'uuid'
 
-export const db = new Dexie('FinanceAppDB')
+export const legacyDb = new Dexie('FinanceAppDB')
 
 const schemaV4 = {
   usuarios: '++id, uuid, nome, createdAt, updatedAt, deletedAt, syncStatus',
@@ -35,9 +37,9 @@ const schemaV5 = {
     '++id, uuid, tipo, usuarioId, usuarioUuid, dataCompetencia, dataPagamento, metodoPagamento, cartaoId, cartaoUuid, faturaRef, categoriaId, categoriaUuid, subcategoriaId, subcategoriaUuid, status, recorrente, recorrenciaId, parcelamentoId, updatedAt, deletedAt, syncStatus'
 }
 
-db.version(1).stores(schemaV4)
+legacyDb.version(1).stores(schemaV4)
 
-db.version(2)
+legacyDb.version(2)
   .stores(schemaV4)
   .upgrade(async (tx) => {
     const mapaLegado = {
@@ -64,9 +66,9 @@ db.version(2)
   })
 
 
-db.version(3).stores(schemaV4)
+legacyDb.version(3).stores(schemaV4)
 
-db.version(4)
+legacyDb.version(4)
   .stores(schemaV4)
   .upgrade(async (tx) => {
     const categorias = await tx.table('categorias').toArray()
@@ -126,7 +128,7 @@ db.version(4)
 })
   })
 
-  db.version(5).stores(schemaV5)
+  legacyDb.version(5).stores(schemaV5)
 
 export const gerarUUID = () => {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -163,10 +165,10 @@ export const softDelete = async (tabela, id) => {
   })
 }
 
-db.on('populate', async () => {
+legacyDb.on('populate', async () => {
   console.log('🌱 Criando dados iniciais...')
 
-  await db.usuarios.add({
+  await legacyDb.usuarios.add({
     uuid: gerarUUID(),
     nome: 'PK',
     cor: '#0F9D58',
@@ -176,7 +178,7 @@ db.on('populate', async () => {
     syncStatus: 'pending'
   })
 
-  await db.usuarios.add({
+  await legacyDb.usuarios.add({
     uuid: gerarUUID(),
     nome: 'Grazi',
     cor: '#3AF2A1',
@@ -201,7 +203,7 @@ db.on('populate', async () => {
   ]
 
   for (const categoria of categorias) {
-    await db.categorias.add({
+    await legacyDb.categorias.add({
       ...criarRegistroBase(),
       nome: categoria.nome,
       icone: categoria.icone,
@@ -222,3 +224,4 @@ export const initDB = async () => {
     throw err
   }
 }
+export const db = MIGRATION_CAPTURE_MODE ? legacyDb : cloudDatabase.db

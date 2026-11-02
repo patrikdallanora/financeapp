@@ -1,5 +1,5 @@
 import { timingSafeEqual } from 'node:crypto'
-import { MIGRATION_CAPTURE_MODE, MIGRATION_MESSAGE } from '../lib/migrationMode.js'
+import { MIGRATION_CAPTURE_MODE, LEGACY_BACKEND_DISABLED, MIGRATION_MESSAGE } from '../lib/migrationMode.js'
 
 export const config = { maxDuration: 60 }
 const tabelas = new Set(['usuarios', 'cartoes', 'lancamentos', 'faturas', 'categorias', 'subcategorias', 'metas'])
@@ -10,7 +10,7 @@ const autorizado = (a, b) => {
 
 // Fixed upstream, same credential as the existing API, no Google browser cookies.
 export default async function handler(req, res) {
-  if (MIGRATION_CAPTURE_MODE) {
+  if (MIGRATION_CAPTURE_MODE || LEGACY_BACKEND_DISABLED) {
     res.setHeader('Cache-Control', 'no-store')
     return res.status(503).json({ erro: MIGRATION_MESSAGE, pausado: true })
   }
