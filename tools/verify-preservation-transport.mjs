@@ -14,7 +14,7 @@ try {
   await pg.exec(`create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth; create table auth.users(id uuid primary key);
     create function auth.uid() returns uuid language sql stable as $$ select null::uuid; $$;`)
-  await pg.exec(await fs.readFile(new URL('../supabase/migrations/202611010001_preservation_staging.sql', import.meta.url), 'utf8'))
+  await pg.exec(await fs.readFile(new URL('../supabase/migrations/20261102133954_preservation_staging.sql', import.meta.url), 'utf8'))
   for (let pass = 0; pass < 2; pass++) {
     for (const batch of manifest.batches) await pg.exec(await fs.readFile(path.join(batchDir, batch), 'utf8'))
     for (const backup of manifest.manifest) {

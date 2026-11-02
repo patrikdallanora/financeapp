@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import fs from 'node:fs/promises'
 import { PGlite } from '@electric-sql/pglite'
 
-const migration = await fs.readFile(new URL('../supabase/migrations/202611010001_preservation_staging.sql', import.meta.url), 'utf8')
+const migration = await fs.readFile(new URL('../supabase/migrations/20261102133954_preservation_staging.sql', import.meta.url), 'utf8')
 const owner = '11111111-1111-4111-8111-111111111111'
 const outsider = '22222222-2222-4222-8222-222222222222'
 const household = '33333333-3333-4333-8333-333333333333'

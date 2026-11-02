@@ -1,19 +1,39 @@
 # Supabase do FinanceApp
 
-## Provisionamento remoto em 2026-11-02
+## Estado em 2 de novembro de 2026
 
-Projeto dedicado `ierhglfrlryooyyxycid`, organização Pk Company, plano Free, região São Paulo (`sa-east-1`); custo de criação informado pelo serviço: US$ 0/mês. A primeira migração local foi aplicada remotamente como `20261102133954_preservation_staging`. A migração remota `20261102134046_preservation_fk_indexes` acrescentou os índices `memberships(user_id)`, `reconciliation_issues(household_id,migration_run_id)` e `source_records(household_id,migration_run_id,source_backup_id)` após a inspeção dos advisors.
+Projeto dedicado `ierhglfrlryooyyxycid`, Pk Company, Free, São Paulo. Custo de criação consultado: US$ 0/mês. Nenhum plano pago ou SMTP externo contratado.
 
-Todas as seis tabelas têm RLS. Clientes não têm privilégios no staging; usuário autenticado sem vínculo não enxerga bases familiares. Os avisos informativos de RLS sem políticas nas cinco tabelas privadas são intencionais: acesso administrativo somente. Não adicionar políticas públicas para remover esses avisos.
+Os backups reais de 02/11 estão completos no banco e fora dele: iPhone 15 Pro, envelope original e 1.511 registros; iPhone 16 Pro, 146 blocos imutáveis e 1.671 registros. Arquivos e hashes canônicos coincidem com os originais. A antiga cópia parcial do 16 Pro ficou congelada para auditoria e não deve ser restaurada.
 
-O backup real de 02/11 do iPhone 15 Pro foi armazenado integralmente: 1.511 registros (incluindo 1.396 lançamentos), hash do arquivo e hash canônico dos registros iguais aos originais. O backup do 16 Pro está **parcial e não validado**, sem registros importados. A revisão automática bloqueou a continuação da cópia em trechos, mesmo após autorização específica do usuário, hashes de prefixos, teste isolado repetido e transações. Não prosseguir com esse transporte sem resolver o bloqueio; não tratar a cópia parcial como backup. Originais privados dos dois aparelhos continuam preservados. Não houve corte do aplicativo ou ativação da sincronização.
+A cópia independente do Sheets está no XLSX privado e no Drive. A união das três fontes preserva 1.575 lançamentos, incluindo cinco exclusivos do Sheets. O usuário confirmou 34 estados pagos, Água/Casal em refeição, nove unificações de categorias e pessoas em PK/Grazi, reparando 102 referências antigas. UUIDs anteriores estão no mapa privado. Não foram mesclados lançamentos por descrição/valor, nem cartões pelo nome.
 
-`tools/prepare-remote-preservation.mjs` prepara lotes SQL privados, transacionais, idempotentes e protegidos por hashes dos prefixos. O diretório gerado contém dados financeiros e deve ficar fora do Git. `tools/verify-preservation-transport.mjs` executa os lotes duas vezes em PGlite, verifica cada registro e calcula um hash canônico para comparar com o banco remoto. As migrações remotas devem ser reconciliadas com o histórico local antes de usar `db push`; não reaplicar a primeira migração com outro timestamp.
+Base canônica: 1.679 registros, sendo 2 pessoas, 10 cartões, 20 categorias, 72 subcategorias, 1.575 lançamentos e zero faturas/metas nas tabelas respectivas. Acumulados de fatura permanecem nos lançamentos, sem soma duplicada. Importação isolada repetida, hash remoto e cópia local paginada conferiram cada registro, inclusive excluídos e extras.
 
-A primeira migração cria somente a área privada de preservação/reconciliação, a base familiar e seus membros. A sincronização nasce desabilitada. Não existe importação automática ou troca do backend nesta etapa.
+## Acesso e protocolo
 
-Aplicar em projeto Supabase dedicado após conexão administrativa autorizada. Membros usam auth.users; as pessoas financeiras do app continuam entidades separadas. Não colocar service_role no Vite ou conceder leitura do staging aos clientes. A área privada preserva duplicados e origens, com integridade referencial por base e execução da migração.
+Todas as tabelas têm RLS. Clientes só leem sua base; staging e evidências são privados. Avisos informativos de RLS sem políticas no schema privado são intencionais: não acrescentar leitura pública para removê-los. Evidências, decisões e mapas aceitos são imutáveis.
 
-Testes SQL executam em PGlite isolado com auth/roles simulados e verificam RLS, negativa de escrita por clientes, duplicação de importação e preservação de UUID repetido. A configuração real de Auth, roles, esquemas expostos e políticas ainda precisa ser verificada no projeto após provisionamento.
+Auth é separado das pessoas financeiras. Allowlist privada associa somente e-mail confirmado à base, sem usar user_metadata para autorização. O usuário cria sua senha no app. URLs de Auth foram configuradas para https://pk-finance.vercel.app por diff mínimo no CLI, mantendo o restante. O Free recusou templates personalizados com provedor padrão: foram mantidos os templates padrão, sem contratar SMTP.
 
-Antes da próxima migração de domínio, reconciliar os snapshots dos dois iPhones com o Sheets. Categorias com mesmo UUID e nomes diferentes não devem ser substituídas por timestamp. O schema de domínio e o protocolo transacional de sincronização serão implementados depois dessa captura, sem ativar gravações de clientes até concluir os testes do plano.
+financeapp_records guarda sete tipos com payload canônico, UUID, centavos inteiros, datas civis, revisão de servidor e tombstones. Validação de referências pertence à mesma base. Escritas diretas de clientes são negadas; as mutações usam RPC transacional, ID estável, revisão esperada, recibos e conflitos preservados. O lock por base precede a alocação do cursor. Pagamentos de vários itens são atômicos. O pull pagina um histórico persistente e tolera lacunas de revisão sem perder mudanças.
+
+Funções públicas são invoker. As definer ficam privadas, com search_path vazio e verificação de sessão/membro. Nenhuma service_role é enviada ao navegador.
+
+## Cliente e passagem para produção
+
+localOutbox.js implementa alteração e fila na mesma transação Dexie, dependências de recibos e confirmação que preserva edição durante envio. Pulls têm staging separado por leitura/aba; dados e cursor são aplicados juntos, sem sobrescrever pendências. FinanceAppSupabaseDB é separado de FinanceAppDB e não cria seed duplicado.
+
+**A fachada de escrita ainda não está conectada às telas financeiras.** MIGRATION_CAPTURE_MODE continua true; API antiga, cron e sync_enabled permanecem pausados. A Preservação 3 oferece login e conferência somente de leitura. Os dois PWAs originais precisam confirmar o snapshot atual usando seus identificadores já capturados. O banco antigo permanece intacto.
+
+Antes da virada: concluir testes autenticados nos dois iPhones, conectar todas as gravações à fachada e ao novo gerenciador, implementar resolução de conflitos, migrar notificações e cercar caminhos antigos. Só então habilitar o escritor único. Rollback após gravações novas exige preservar e reaplicar o delta.
+
+## Histórico e ferramentas
+
+Os arquivos de migrations usam as versões realmente aplicadas no remoto. Não reaplicar a migração inicial com outro timestamp.
+
+prepare-remote-preservation.mjs e verify-preservation-transport.mjs documentam o transporte antigo. **Não usá-los para alterar envelopes remotos:** concatenações foram rejeitadas e agora as evidências estão congeladas.
+
+Usar prepare-immutable-archive.mjs e verify-immutable-archive.mjs para transporte insert-only. build-consolidated-candidate.mjs exige decisões explícitas; verify-canonical-candidate.mjs ensaia importação/repetição; prepare-canonical-import.mjs prepara lotes privados; verify-cloud-local-copy.mjs confere ida e volta entre valores canônicos e IDs locais.
+
+Diretórios gerados são privados e nunca entram no Git. Testes usam dados sintéticos. Variáveis Vercel de produção/preview recebem somente URL e chave publicável do Supabase; não registrar credenciais ou .env.local no Git ou nas memórias.

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { deviceBackup, prepareBackupFile, saveBackupFile, repairCategoriesOnDevice } from '../backup/browserBackup.js'
+import CloudMigrationPanel from '../components/CloudMigrationPanel.jsx'
 
 export default function Preservacao() {
   const [initial, setInitial] = useState(null)
@@ -52,10 +53,12 @@ export default function Preservacao() {
 
   const button = 'w-full min-h-[48px] rounded-2xl border border-[#3AF2A1]/40 px-4 py-3 font-bold text-[#3AF2A1] disabled:opacity-40'
   return <main className="mx-auto min-h-screen max-w-lg space-y-5 bg-black px-5 py-8 text-white">
-    <p className="text-sm font-bold text-[#3AF2A1]">FinanceApp · Preservação 2</p>
-    <h1 className="text-2xl font-bold">Backup deste iPhone</h1>
+    <p className="text-sm font-bold text-[#3AF2A1]">FinanceApp · Preservação 3</p>
+    <h1 className="text-2xl font-bold">Conferência da migração</h1>
     <p className="text-sm leading-6 text-[#C7D2CC]">A sincronização e as edições estão pausadas para preservar as diferenças entre os dois aparelhos. Seus dados continuam neste iPhone.</p>
     <p className="text-sm leading-6 text-[#C7D2CC]">Não reinstale o app, não limpe os dados do Safari e não use restauração. Faça este procedimento também no outro iPhone.</p>
+    <CloudMigrationPanel />
+    <details className="space-y-5"><summary className="min-h-[44px] cursor-pointer py-3 font-bold">Backups originais e correção local</summary>
     <section className="space-y-2 rounded-2xl border border-[#1C3D2E] p-4">
       <h2 className="font-bold">Correção das categorias</h2>
       {repairing && <p role="status" className="text-sm">Salvando backup e corrigindo os vínculos das categorias…</p>}
@@ -91,5 +94,6 @@ export default function Preservacao() {
     </section>}
     {message && <p role="status" className="text-sm leading-6 text-[#3AF2A1]">{message}</p>}
     <p className="text-xs leading-5 text-[#91A99C]">Os arquivos contêm seus dados financeiros. Guarde-os em local privado. O app não envia o backup automaticamente. Salvar um arquivo não retoma a sincronização.</p>
+    </details>
   </main>
 }

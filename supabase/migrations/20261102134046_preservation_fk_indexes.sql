@@ -1,0 +1,3 @@
+create index memberships_by_user on financeapp_private.memberships(user_id);
+create index reconciliation_by_household_run on financeapp_private.reconciliation_issues(household_id,migration_run_id);
+create index source_records_by_household_backup on financeapp_private.source_records(household_id,migration_run_id,source_backup_id);

@@ -16,7 +16,7 @@ try {
     await pg.exec(`create role anon; create role authenticated; create role service_role bypassrls;
       create schema auth; create table auth.users(id uuid primary key);
       create function auth.uid() returns uuid language sql stable as $$ select null::uuid; $$;`)
-    const migration = await fs.readFile(new URL('../supabase/migrations/202611010001_preservation_staging.sql', import.meta.url), 'utf8')
+    const migration = await fs.readFile(new URL('../supabase/migrations/20261102133954_preservation_staging.sql', import.meta.url), 'utf8')
     await pg.exec(migration)
   }
   let context

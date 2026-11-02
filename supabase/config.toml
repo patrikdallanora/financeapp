@@ -1,0 +1,10 @@
+project_id = "financeapp"
+
+# Sparse config: CLI 3 config diff/push leaves undeclared properties unchanged.
+[auth]
+site_url = "https://pk-finance.vercel.app"
+additional_redirect_urls = ["https://pk-finance.vercel.app"]
+
+[auth.email]
+enable_confirmations = true
+
