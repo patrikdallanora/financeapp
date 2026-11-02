@@ -7,4 +7,3 @@ additional_redirect_urls = ["https://pk-finance.vercel.app"]
 
 [auth.email]
 enable_confirmations = true
-
